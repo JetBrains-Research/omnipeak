@@ -42,14 +42,12 @@ ENCODE [broadPeak](https://genome.ucsc.edu/FAQ/FAQformat.html#format13) (BED 6+3
 <chromosome> <peak start offset> <peak end offset> <peak_name> <score> . <coverage or fold/change> <-log p-value> <-log Q-value>
 ```
 
-Examples:
+Examples on Java 21:
 
 * Regular peak calling<br>
-  `java -Xmx8G -jar omnipeak.jar analyze -t ChIP.bam -c Control.bam --cs Chrom.sizes -p Results.peak`
-* Semi-supervised peak calling<br>
-  `java -Xmx8G -jar omnipeak.jar analyze -t ChIP.bam -c Control.bam --cs Chrom.sizes -l Labels.bed -p Results.peak`
+  `java --add-modules=jdk.incubator.vector -Xmx8G -jar omnipeak.jar analyze -t ChIP.bam -c Control.bam --cs Chrom.sizes -p Results.peak`
 * Model fitting only<br>
-  `java -Xmx8G -jar omnipeak.jar analyze -t ChIP.bam -c Control.bam --cs Chrom.sizes -m Model.op`
+  `java --add-modules=jdk.incubator.vector -Xmx8G -jar omnipeak.jar analyze -t ChIP.bam -c Control.bam --cs Chrom.sizes -m Model.op`
 
 Differential peak calling
 -------------------------
@@ -58,7 +56,7 @@ _Experimental!_
 To compare two (possibly replicated) biological conditions use the `compare`. See help for details:
 
 ```bash
-$ java -jar omnipeak.jar compare --help
+$ java --add-modules=jdk.incubator.vector -Xmx8G -jar omnipeak.jar compare --help
 ```
 
 Command line options
