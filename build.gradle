@@ -1,0 +1,156 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+
+// Omnipeak application version
+version = "1.0"
+
+buildscript {
+    ext.kotlin_version = "2.2.0"
+
+    repositories {
+        maven { url("https://repo1.maven.org/maven2") }
+        maven { url("https://plugins.gradle.org/m2") }
+        maven { url("https://jitpack.io") }
+    }
+
+    dependencies {
+        classpath "gradle.plugin.com.github.johnrengelman:shadow:7.1.2"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+/* We can't use `plugins` block here because of the multi-root setup, since the `plugins` block doesn't allow
+ * specifying a plugin more than once throughout the whole project. */
+apply plugin: "application"
+apply plugin: "com.github.johnrengelman.shadow"
+apply plugin: "kotlin"
+
+application {
+    mainClass.set("org.jetbrains.bio.omnipeak.OmnipeakCLA")
+}
+
+sourceCompatibility = 21
+targetCompatibility = sourceCompatibility
+compileKotlin { kotlinOptions.jvmTarget = sourceCompatibility }
+compileTestKotlin { kotlinOptions.jvmTarget = sourceCompatibility }
+
+if (rootProject == project) {
+    repositories {
+        maven { url("https://repo1.maven.org/maven2") }
+        maven { url("https://plugins.gradle.org/m2") }
+    }
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlin_version")
+
+    // Logging dependencies
+    implementation("ch.qos.logback:logback-classic:1.3.14")
+    implementation("ch.qos.logback:logback-core:1.3.14")
+
+    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("org.apache.commons:commons-csv:1.10.0")
+    implementation("org.jetbrains.bio:npy:0.3.5")
+
+    implementation("net.sf.jopt-simple:jopt-simple:5.0.4")
+    implementation("org.jetbrains.bio:viktor:2.0.0")
+    implementation("org.jetbrains.bio:big:0.9.1")
+
+    implementation project(":bioinf-commons")
+    testImplementation project(path: ":bioinf-commons", configuration: "testOutput")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlin:kotlin-test:$kotlin_version")
+}
+
+private String settingsFolder(final String propertyName, final String folderName) {
+    if (!System.hasProperty(propertyName)) {
+        return "${rootProject.buildDir}/.tests/$folderName"
+    } else {
+        return System.getProperty(propertyName)
+    }
+}
+
+test {
+    dependsOn ":bioinf-commons:generateTestOrganism"
+    dependsOn ":bioinf-commons:test"
+    dependsOn "processBuildProperties"
+
+    include "**/*Test.class"
+
+    ignoreFailures = true
+    maxParallelForks = Runtime.runtime.availableProcessors()
+    maxHeapSize = "1024m"
+
+    testLogging.showStandardStreams = true
+
+    // Add JVM options for Vector API
+    jvmArgs '--add-modules', 'jdk.incubator.vector'
+
+    systemProperty "genomes.path", settingsFolder("genomes.path", "genomes")
+    systemProperty "experiments.path", settingsFolder("experiments.path", "experiments")
+    systemProperty "raw.data.path", settingsFolder("experiments.path", "rawdata")
+    systemProperty "caches.path", settingsFolder("genomes.path", "caches")
+    systemProperty "logs.path", settingsFolder("experiments.path", "logs")
+
+    systemProperty "teamcity.build.checkoutDir", System.getProperty("teamcity.build.checkoutDir")
+}
+
+task processBuildProperties(type: Copy) {
+    shadowJar.dependsOn name
+
+    // turn of cache for this task
+    outputs.upToDateWhen { false }
+
+    // Fix version and build in properties file
+    from(sourceSets.main.resources) {
+        include "omnipeak.properties"
+    }
+    into sourceSets.main.output.resourcesDir
+    filter(ReplaceTokens, tokens: [
+            VERSION: version,
+            BUILD  : project.buildCounter,
+            DATE   : new Date().format("MMMM dd, yyyy")
+    ])
+}
+
+task sourcesJar(type: Jar) {
+    archiveClassifier = "sources"
+    from sourceSets.main.allSource
+}
+
+artifacts {
+    archives sourcesJar
+}
+
+shadowJar {
+    // File name: "$baseName-$version-$classifier.jar"
+    archiveBaseName.set("omnipeak")
+    archiveVersion.set("${version}.${project.buildCounter}")
+    archiveClassifier.set("")
+    zip64 true
+    mustRunAfter test
+    // umm
+    mustRunAfter clean
+}
+
+jar {
+    dependsOn "processBuildProperties"
+
+    manifest {
+        attributes provider: "gradle"
+        attributes "Application-Name": "OmniPeak $version"
+        attributes "Built-By": "JetBrains Research TeamCity"
+    }
+}
+
+clean {
+    dependsOn ":bioinf-commons:clean"
+}
+
+// https://github.com/gradle/gradle/issues/5816
+if (rootProject == project) {
+    wrapper {
+        gradleVersion = "8.5"
+    }
+}
