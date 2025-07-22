@@ -11,7 +11,7 @@ object SPAN2 {
             "org.jetbrains.bio.span.fit.SpanAnalyzeFitInformation",
             OmnipeakAnalyzeFitInformation::class.qualifiedName!!
         ).replace(
-            "org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM",
+            "org.jetbrains.bio.span.statistics.hmm.NB2ZHMM",
             NB2ZHMM::class.qualifiedName!!
         )
 
