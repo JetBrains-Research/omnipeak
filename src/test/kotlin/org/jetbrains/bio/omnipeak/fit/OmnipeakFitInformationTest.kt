@@ -4,6 +4,7 @@ import com.google.gson.JsonParseException
 import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.FixedFragment
+import org.jetbrains.bio.omnipeak.SPAN2.toOmnipeak
 import org.jetbrains.bio.util.bufferedReader
 import org.jetbrains.bio.util.bufferedWriter
 import org.jetbrains.bio.util.withTempFile
@@ -115,7 +116,7 @@ class OmnipeakFitInformationTest {
 }"""
                 )
             }
-            OmnipeakFitInformation.load<OmnipeakFitInformation>(path)
+            OmnipeakFitInformation.load<OmnipeakFitInformation>(toOmnipeak(path.bufferedReader().readText()))
         }
     }
 
@@ -155,7 +156,7 @@ class OmnipeakFitInformationTest {
 }"""
                 )
             }
-            OmnipeakFitInformation.load<OmnipeakFitInformation>(path)
+            OmnipeakFitInformation.load<OmnipeakFitInformation>(toOmnipeak(path.bufferedReader().readText()))
         }
     }
 
@@ -173,7 +174,7 @@ class OmnipeakFitInformationTest {
 }"""
                 )
             }
-            OmnipeakFitInformation.load<OmnipeakFitInformation>(path)
+            OmnipeakFitInformation.load<OmnipeakFitInformation>(toOmnipeak(path.bufferedReader().readText()))
         }
     }
 
@@ -210,7 +211,7 @@ class OmnipeakFitInformationTest {
 }"""
                 )
             }
-            OmnipeakFitInformation.load<OmnipeakFitInformation>(path)
+            OmnipeakFitInformation.load<OmnipeakFitInformation>(toOmnipeak(path.bufferedReader().readText()))
         }
     }
 

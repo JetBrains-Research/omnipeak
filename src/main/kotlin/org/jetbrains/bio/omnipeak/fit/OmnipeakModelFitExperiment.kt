@@ -8,6 +8,9 @@ import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.Fragment
 import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.genome.query.ReadsQuery
+import org.jetbrains.bio.omnipeak.SPAN2
+import org.jetbrains.bio.omnipeak.SPAN2.toOmnipeak
+import org.jetbrains.bio.omnipeak.fit.OmnipeakModelFitExperiment.Companion.loadResults
 import org.jetbrains.bio.statistics.Preprocessed
 import org.jetbrains.bio.statistics.f64Array
 import org.jetbrains.bio.statistics.hypothesis.NullHypothesis
@@ -268,7 +271,8 @@ abstract class OmnipeakModelFitExperiment<
             val chromosomes = genomeQuery.get()
             val nonEmptyChromosomes = hashSetOf<Chromosome>()
             paths.forEach { (t, c) ->
-                val coverage = ReadsQuery(genomeQuery, t, explicitFormat, unique, fragment, showLibraryInfo = false).get()
+                val coverage =
+                    ReadsQuery(genomeQuery, t, explicitFormat, unique, fragment, showLibraryInfo = false).get()
                 if (c != null) {
                     // we have to be sure that the control coverage cache is calculated for the full genome query,
                     // otherwise we can get some very hard-to-catch bugs later
@@ -305,11 +309,17 @@ abstract class OmnipeakModelFitExperiment<
                 Tar.decompress(modelPath, dir.toFile())
 
                 LOG.debug("Completed model file decompress and started loading: ${modelPath.stem}")
-                val info = OmnipeakFitInformation.load<OmnipeakFitInformation>(dir / INFORMATION_JSON)
+                val info = OmnipeakFitInformation.load<OmnipeakFitInformation>(
+                    toOmnipeak((dir / INFORMATION_JSON).bufferedReader().readText())
+                )
+                checkNotNull(info) { "Failed to load model information" }
                 // Check genome build
                 genomeQuery?.let { info.checkGenome(it.genome) }
                 // Load model and PEPs
-                val model = ClassificationModel.load<ClassificationModel>(dir / MODEL_JSON)
+                val model = ClassificationModel.load<ClassificationModel>(
+                    toOmnipeak((dir / MODEL_JSON).bufferedReader().readText())
+                )
+                checkNotNull(model) { "Failed to load model from file" }
                 val logNullMembershipsDF = DataFrame.load(dir / NULL_NPZ)
                 val logNullMembershipsMap = info.split(logNullMembershipsDF, genomeQuery)
                 var statesDfMap: Map<String, DataFrame>? = null

@@ -263,21 +263,9 @@ interface OmnipeakFitInformation {
          * [IllegalStateException] is thrown.
          */
         @Suppress("unchecked_cast")
-        fun <T : OmnipeakFitInformation> load(path: Path): T {
-            val info = path.bufferedReader().use {
-                // Backward compatibility with SPAN2
-                val text = it.readText()
-                    .replace(
-                        "org.jetbrains.bio.span.fit.SpanAnalyzeFitInformation",
-                        OmnipeakAnalyzeFitInformation::class.qualifiedName!!
-                    ).replace(
-                        "org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM",
-                        NB2ZHMM::class.qualifiedName!!
-                    )
-                GSON.fromJson(text, OmnipeakAnalyzeFitInformation::class.java) as T?
-            }
-            check(info != null) { "Failed to load fit information from $path." }
-            return info
+        fun <T : OmnipeakFitInformation> load(json: String): T? {
+            return GSON.fromJson(json, OmnipeakAnalyzeFitInformation::class.java) as T?
         }
+
     }
 }
