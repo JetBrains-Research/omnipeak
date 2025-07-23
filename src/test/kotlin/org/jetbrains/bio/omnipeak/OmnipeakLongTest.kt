@@ -83,8 +83,8 @@ class OmnipeakLongTest {
         }
         // the test is sometimes launched in the assembled JAR, where the @@ tokens have already been substituted
         assertMatches(
-            out.trim(),
-            Regex("^[0-9]+\\.[0-9]+(\\.dev)?\\.[0-9]+ built on [A-Z][a-z]* [0-9]{2}, [0-9]{4}")
+            version,
+            Regex("^[0-9]+(\\.[0-9]+)+(\\.build)? built on [A-Z][a-z]* [0-9]+, [0-9]{4}")
         )
     }
 
