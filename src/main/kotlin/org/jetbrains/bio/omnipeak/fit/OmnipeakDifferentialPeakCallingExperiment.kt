@@ -18,7 +18,7 @@ import org.jetbrains.bio.util.div
 import java.nio.file.Path
 
 /**
- * Corresponds to Span `compare` invocation.
+ * Corresponds to Omnipeak `compare` invocation.
  *
  * The treatment-control pairs are split into two sets that are to compare.
  *

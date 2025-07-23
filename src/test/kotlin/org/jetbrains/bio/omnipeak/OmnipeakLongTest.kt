@@ -309,7 +309,7 @@ PEAKS: $peaksPath
 
             withTempDirectory("work") { dir ->
                 val chromsizes = Genome["to1"].chromSizesPath.toString()
-                /* We can't test the stdout, because the Span quiet mode redefines the JVM [System.out].
+                /* We can't test the stdout, because the Omnipeak quiet mode redefines the JVM [System.out].
                  * But we can restore the System.out to the original value using [captureLoggingOutput].
                  */
                 Logs.captureLoggingOutput {
@@ -327,7 +327,7 @@ PEAKS: $peaksPath
                     /* the best we can do is to check whether any redirection took place */
                     assertNotEquals(
                         oldSystemOut, System.out,
-                        "Span quiet mode didn't redirect System.out"
+                        "Omnipeak quiet mode didn't redirect System.out"
                     )
                 }
                 val modelId = OmnipeakAnalyzeFitInformation.generateId(
@@ -394,7 +394,7 @@ PEAKS: $peaksPath
                     assertEquals(0, Configuration.cachesPath.glob("coverage_${control.stemGz}_unique#*.npz").size)
                     // Model test
                     assertEquals(
-                        0, Configuration.experimentsPath.glob("$modelId*.span").size
+                        0, Configuration.experimentsPath.glob("$modelId*.omni").size
                     )
                 }
             }
@@ -461,7 +461,7 @@ PEAKS: $peaksPath
                     sampleCoverage(control, TO, OMNIPEAK_DEFAULT_BIN, goodQuality = false)
 
                     val chromsizes = Genome["to1"].chromSizesPath.toString()
-                    val modelPath = dir / "custom" / "path" / "model.span"
+                    val modelPath = dir / "custom" / "path" / "model.omni"
                     OmnipeakCLA.main(
                         arrayOf(
                             "analyze",
@@ -850,7 +850,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
             println("Saved sampled track file: $path")
             withTempDirectory("work") { dir ->
                 val bedPath = dir / "result.bed"
-                val modelPath = dir / "model.span"
+                val modelPath = dir / "model.omni"
                 OmnipeakCLA.main(
                     arrayOf(
                         "analyze",

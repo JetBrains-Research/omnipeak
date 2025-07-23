@@ -19,7 +19,7 @@ import org.jetbrains.bio.util.div
 import java.nio.file.Path
 
 /**
- * Corresponds to Span `analyze --type nbhmm` invocation.
+ * Corresponds to Omnipeak `analyze --type nbhmm` invocation.
  *
  * For each treatment-control pair, we compute binned normalized coverage.
  * These coverages are used as the input for a three-state multidimensional negative binomial HMM.

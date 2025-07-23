@@ -37,19 +37,19 @@ object OmnipeakCLA {
     /**
      * This is a HACK.
      * Since [Configuration] allows configuring experimentsPath only once,
-     * SpanCLA fails to set up correct working directory, if launched within the same process.
+     * OmnipeakCLA fails to set up correct working directory, if launched within the same process.
      */
     var ignoreConfigurePaths: Boolean = false
 
     init {
         // Load build properties
-        val resource = OmnipeakCLA::class.java.getResource("/span.properties")
+        val resource = OmnipeakCLA::class.java.getResource("/omnipeak.properties")
         resource?.openStream()?.use { System.getProperties().load(it) }
     }
 
     internal fun version() =
-        "${System.getProperty("span.build.version", "@VERSION@.@build@")} " +
-                "built on ${System.getProperty("span.build.date", "@DATE@")}"
+        "${System.getProperty("omnipeak.build.version", "@VERSION@.@build@")} " +
+                "built on ${System.getProperty("omnipeak.build.date", "@DATE@")}"
 
 
     private const val HELP = """

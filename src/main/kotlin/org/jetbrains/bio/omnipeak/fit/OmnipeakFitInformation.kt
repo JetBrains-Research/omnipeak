@@ -24,13 +24,13 @@ import java.util.*
  * The most common interface for all fit information classes.
  *
  * [OmnipeakFitInformation] instance is designed to contain all information necessary to uniquely identify the input
- * of a Span-like model fitting experiment. For example, [OmnipeakAnalyzeFitInformation] completely describes
- * the input of the classical `span analyze` command.
+ * of a Omnipeak-like model fitting experiment. For example, [OmnipeakAnalyzeFitInformation] completely describes
+ * the input of the classical `omnipeak analyze` command.
  *
  * [OmnipeakFitInformation] object is a part of [OmnipeakFitResults], and its type is type parameter
  * of [OmnipeakModelFitExperiment].
  *
- * All Span-like experiments produce a single squashed float array of log null probabilities ("null.npz").
+ * All Omnipeak-like experiments produce a single squashed float array of log null probabilities ("null.npz").
  * This interface contains methods to squash ([merge]) and unsquash ([split]) the chromosome-wise dataframes.
  * It can also generate bin start [offsets] for a single chromosome.
  */

@@ -130,7 +130,7 @@ data class OmnipeakCompareFitInformation(
 
     override fun toString(): String {
         return """
-            SpanCompareFitInformation
+            OmnipeakCompareFitInformation
                 build=$build,
                 data1=$data1,
                 data2=$data2,

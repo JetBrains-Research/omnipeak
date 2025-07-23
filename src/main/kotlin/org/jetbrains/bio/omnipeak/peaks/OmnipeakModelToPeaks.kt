@@ -846,7 +846,7 @@ object OmnipeakModelToPeaks {
         offsets: IntArray,
         cancellableState: CancellableState?
     ): F64Array {
-        // TODO[oleg] support SpanCompareFitInformation
+        // TODO[oleg] support OmnipeakCompareFitInformation
         val readsTreatmentAvailable =
             fitInfo is OmnipeakAnalyzeFitInformation &&
                     fitInfo.normalizedCoverageQueries?.all { it.areCachesPresent() } ?: false

@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
 import java.nio.file.Path
 
 /**
- * Contains the results of a Span-like model-fitting experiment.
+ * Contains the results of a Omnipeak-like model-fitting experiment.
  *
  * @property fitInfo The [OmnipeakFitInformation] instance that describes the experiment input.
  * @property model The [ClassificationModel] that was fitted during the experiment.

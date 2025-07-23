@@ -26,10 +26,7 @@ import java.util.concurrent.Callable
 
 
 /**
- * A generic class for Span (Semi-supervised Peak ANalyzer), a tool for analyzing and comparing ChIP-Seq data.
- *
- * Span can utilize various models ([Model]) and inputs ([FitInfo]),
- * as reflected by the class's generic and abstract nature.
+ * A generic class for Omnipeak a tool for analyzing and comparing ChIP-Seq data.
  *
  * The end result of the experiment is the [results] property. It's lazy (won't do any calculation until
  * actually accessed) and cached (if possible, will be loaded from the previously created file, if not, will
@@ -240,7 +237,7 @@ abstract class OmnipeakModelFitExperiment<
 
     override fun toString(): String {
         return """
-            SpanModelFitExperiment:
+            OmnipeakModelFitExperiment:
                 fitInformation: $fitInformation
                 modelPath: $modelPath
                 threshold: $threshold

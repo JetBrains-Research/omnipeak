@@ -125,7 +125,7 @@ data class OmnipeakAnalyzeFitInformation(
 
     override fun toString(): String {
         return """
-            SpanAnalyzeFitInformation
+            OmnipeakAnalyzeFitInformation
                 build='$build',
                 paths=$paths,
                 fragment=$fragment,

@@ -170,7 +170,7 @@ class OmnipeakFitInformationTest {
                     """{
   "foo": "bar",
   "baz": [],
-  "fit.information.fqn": "org.jetbrains.bio.omnipeak.fit.SpanFitInformation"
+  "fit.information.fqn": "org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation"
 }"""
                 )
             }
