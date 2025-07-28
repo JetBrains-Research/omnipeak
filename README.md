@@ -12,6 +12,7 @@ Features
 --------
 
 * Supports both narrow and broad footprint experiments (ChIP-seq, ATAC-seq, DNAse-seq)
+* Supports BAM, SAM, CRAM, BED, BigWig input formats
 * Produces robust results on datasets of different signal-to-noise ratio, including Ultra-Low-Input ChIP-seq
 * Produces highly consistent results in multiple-replicates experiment setup
 * Tolerates missing control experiment

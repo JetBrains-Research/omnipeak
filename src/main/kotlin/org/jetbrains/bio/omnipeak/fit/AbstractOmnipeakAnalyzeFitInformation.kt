@@ -1,11 +1,11 @@
 package org.jetbrains.bio.omnipeak.fit
 
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.genome.format.ReadsFormat
+import org.jetbrains.bio.omnipeak.InputFormat
 
 interface AbstractOmnipeakAnalyzeFitInformation : OmnipeakFitInformation {
     val paths: List<OmnipeakDataPaths>
-    val explicitFormat: ReadsFormat?
+    val explicitFormat: InputFormat?
     val fragment: Fragment
     val unique: Boolean
 }

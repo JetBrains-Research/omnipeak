@@ -5,7 +5,6 @@ import org.jetbrains.bio.experiment.Configuration
 import org.jetbrains.bio.experiment.configurePaths
 import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.GenomeQuery
-import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.fit.*
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
@@ -221,7 +220,7 @@ object  OmnipeakCLACompare {
         val genomeQuery = GenomeQuery(Genome[chromSizesPath!!])
         val (data1, data2) = getComparePaths(options, log = true)
         LOG.info("CHROM.SIZES: $chromSizesPath")
-        val explicitFormat: ReadsFormat? = OmnipeakCLA.readsFormat(options, log=true)
+        val explicitFormat: InputFormat? = OmnipeakCLA.readsFormat(options, log=true)
         val fragment = OmnipeakCLA.getFragment(options, log = true)
         val unique = OmnipeakCLA.getUnique(options, log = true)
         val bin = OmnipeakCLA.getBin(options, log = true)

@@ -1,8 +1,6 @@
 package org.jetbrains.bio.omnipeak.coverage
 
 import org.apache.commons.math3.stat.correlation.PearsonsCorrelation
-import org.jetbrains.bio.dataframe.DataFrame
-import org.jetbrains.bio.genome.Chromosome
 import org.jetbrains.bio.genome.ChromosomeRange
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.Coverage
@@ -13,6 +11,7 @@ import org.jetbrains.bio.genome.query.ReadsQuery
 import org.jetbrains.bio.omnipeak.coverage.NormalizedCoverageQuery.Companion.analyzeCoverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_BETA_STEP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
+import org.jetbrains.bio.util.deleteIfExists
 import org.jetbrains.bio.util.isAccessible
 import org.jetbrains.bio.util.reduceIds
 import org.jetbrains.bio.util.stemGz
@@ -106,7 +105,7 @@ class NormalizedCoverageQuery(
      * normCov = treatmentCov - controlCov * controlScale * beta
      * See #estimateScaleAndBeta
      */
-    override fun apply(t: ChromosomeRange): Int {
+    fun controlNormalizedScore(t: ChromosomeRange): Int {
         val treatmentCoverage = treatmentReads.get().getBothStrandsCoverage(t)
         if (controlPath == null) {
             return treatmentCoverage
@@ -114,6 +113,15 @@ class NormalizedCoverageQuery(
         val (controlScale, beta, _) = coveragesNormalizedInfo
         val controlCoverage = controlReads!!.get().getBothStrandsCoverage(t)
         return max(0.0, ceil(treatmentCoverage - controlCoverage * controlScale * beta)).toInt()
+    }
+
+    override fun apply(t: ChromosomeRange): Int {
+        return controlNormalizedScore(t)
+    }
+
+    fun cleanCaches() {
+        treatmentReads.npzPath().deleteIfExists()
+        controlReads?.npzPath()?.deleteIfExists()
     }
 
     companion object {
@@ -212,23 +220,4 @@ class NormalizedCoverageQuery(
             return NormalizedCoverageInfo(controlScale, minB, minCorrelation)
         }
     }
-}
-
-/**
- * Calculates the binned coverage DataFrame for a list of normalized coverage queries.
- * Using clip percentile may slightly help to avoid out-of-range during model fit.
- */
-fun List<NormalizedCoverageQuery>.binnedCoverageDataFrame(
-    chromosome: Chromosome,
-    binSize: Int,
-    labels: Array<String>,
-): DataFrame {
-    var res = DataFrame()
-    forEachIndexed { d, inputQuery ->
-        val binnedCoverage = chromosome.range.slice(binSize).mapToInt { range ->
-            inputQuery.apply(range.on(chromosome))
-        }.toArray()
-        res = res.with(labels[d], binnedCoverage)
-    }
-    return res
 }

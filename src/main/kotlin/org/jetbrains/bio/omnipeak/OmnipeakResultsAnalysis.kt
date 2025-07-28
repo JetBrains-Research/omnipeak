@@ -9,10 +9,11 @@ import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.Coverage
+import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP
-import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
+import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.analyzeAdditiveCandidates
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.computeCorrelations
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.detectSensitivityTriangle
@@ -59,10 +60,10 @@ object SpanResultsAnalysis {
         peaksPath: Path?
     ) {
         val name = actualModelPath.fileName.stem
-        check(fitInfo.normalizedCoverageQueries != null) {
+        check(fitInfo.binnedCoverageQueries != null) {
             "$name Please use prepareData before!"
         }
-        check(fitInfo.normalizedCoverageQueries!!.all { it.areCachesPresent() }) {
+        check(fitInfo.binnedCoverageQueries!!.all { it.areCachesPresent() }) {
             "$name Coverage information is not available"
         }
         val infoFile = if (peaksPath != null) "$peaksPath.txt" else null
@@ -87,34 +88,47 @@ object SpanResultsAnalysis {
                 omnipeakFitResults.model.outOfSignalToNoiseRatioRangeDown
         logInfo("Model low signal to noise: $modelLowSignalToNoise", infoWriter)
 
-        LOG.info("$name Analysing auto correlations...")
-        val ncq = fitInfo.normalizedCoverageQueries!!.first()
-        val (controlScale, beta, minCorrelation) = ncq.coveragesNormalizedInfo
-        val treatmentCoverage = ncq.treatmentReads.coverage()
-        val treatmentTotal = genomeQuery.get().sumOf {
-            treatmentCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()
-        }
-        logInfo("Treatment coverage: $treatmentTotal", infoWriter)
-        val controlCoverage = ncq.controlReads?.coverage()
-        if (controlCoverage != null) {
-            val controlTotal = genomeQuery.get().sumOf {
-                controlCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()
-            }
-            logInfo("Control coverage: $controlTotal", infoWriter)
-            logInfo("Control scale: $controlScale", infoWriter)
-            logInfo("Beta: $beta", infoWriter)
-            logInfo("Min control correlation: $minCorrelation", infoWriter)
-        }
         val blackList = if (blackListPath != null) {
             LOG.info("$name Loading blacklist regions: $blackListPath")
             LocationsMergingList.load(genomeQuery, blackListPath)
         } else null
-        LOG.info("$name Analysing coverage distribution...")
-        var coverage = computeCoverageScores(
-            genomeQuery,
-            treatmentCoverage, controlCoverage, controlScale,
-            beta, fitInfo.binSize, blackList
-        )
+
+
+        LOG.info("$name Analysing auto correlations...")
+        var coverage: DoubleArray
+        val binnedQuery = fitInfo.binnedCoverageQueries!!.first()
+        if (binnedQuery is NormalizedBinnedCoverageQuery) {
+            val ncq = binnedQuery.ncq
+            val (controlScale, beta, minCorrelation) = ncq.coveragesNormalizedInfo
+            val treatmentCoverage = ncq.treatmentReads.coverage()
+            val treatmentTotal = genomeQuery.get().sumOf {
+                treatmentCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()
+            }
+            logInfo("Treatment coverage: $treatmentTotal", infoWriter)
+            val controlCoverage = ncq.controlReads?.coverage()
+            if (controlCoverage != null) {
+                val controlTotal = genomeQuery.get().sumOf {
+                    controlCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()
+                }
+                logInfo("Control coverage: $controlTotal", infoWriter)
+                logInfo("Control scale: $controlScale", infoWriter)
+                logInfo("Beta: $beta", infoWriter)
+                logInfo("Min control correlation: $minCorrelation", infoWriter)
+            }
+            LOG.info("$name Analysing coverage distribution...")
+            coverage = computeCoverageScores(
+                genomeQuery,
+                treatmentCoverage, controlCoverage, controlScale,
+                beta, fitInfo.binSize, blackList
+            )
+            LOG.info("$name Analysing tracks variance...")
+            val normVariance = computeAverageVariance(
+                genomeQuery, treatmentCoverage, controlCoverage, controlScale, beta, blackList
+            )
+            logInfo("Track normalized variance: ${"%.3f".format(normVariance)}", infoWriter)
+        } else {
+            coverage = DoubleArray(genomeQuery.get().size) { 0.0 }
+        }
         logInfo("Coverage >0 %: ${(100.0 * coverage.count { it > 0 } / coverage.size).toInt()}", infoWriter)
         coverage = coverage.filter { it > 0 }.toDoubleArray()
         logInfo("Coverage >0 max: ${coverage.maxOrNull()}", infoWriter)
@@ -126,12 +140,6 @@ object SpanResultsAnalysis {
         val logNullPvals = getLogNullPvals(genomeQuery, omnipeakFitResults, blackList)
         logInfo("LogNullPVals mean: ${logNullPvals.average()}", infoWriter)
         logInfo("LogNullPVals std: ${logNullPvals.standardDeviation()}", infoWriter)
-
-        LOG.info("$name Analysing tracks variance...")
-        val normVariance = computeAverageVariance(
-            genomeQuery, treatmentCoverage, controlCoverage, controlScale, beta, blackList
-        )
-        logInfo("Track normalized variance: ${"%.3f".format(normVariance)}", infoWriter)
 
         // Collect candidates from model
         val logNullMembershipsMap = genomeMap(genomeQuery, parallel = true) { chromosome ->
@@ -447,10 +455,10 @@ object SpanResultsAnalysis {
         }
     }
 
-    val REGION_LEN = 10_000
-    val TOP_REGIONS = 10_000
-    val WORK_REGIONS = 200
-    val RESOLUTION = 100
+    const val REGION_LEN = 10_000
+    const val TOP_REGIONS = 10_000
+    const val WORK_REGIONS = 200
+    const val RESOLUTION = 100
 
     /**
      * Detects normalized variance as average std / mean for candidates
@@ -463,9 +471,9 @@ object SpanResultsAnalysis {
         controlScale: Double?,
         beta: Double,
         blackList: LocationsMergingList? = null,
-        region_len: Int = REGION_LEN,
-        top_regions: Int = TOP_REGIONS,
-        work_regions: Int = WORK_REGIONS,
+        regionLen: Int = REGION_LEN,
+        topRegions: Int = TOP_REGIONS,
+        workRegions: Int = WORK_REGIONS,
         resolution: Int = RESOLUTION
     ): Double {
         LOG.debug("Compute coverage in regions")
@@ -476,24 +484,24 @@ object SpanResultsAnalysis {
             .take(3)
             .map { it.name }.toTypedArray()
         val limitedQuery = GenomeQuery(genomeQuery.genome, *chrs)
-        val genomeRegions = limitedQuery.get().sumOf { floor(it.length.toDouble() / region_len).toLong() }
-        check(top_regions < genomeRegions) {
-            "Too many top regions $top_regions > $genomeRegions"
+        val genomeRegions = limitedQuery.get().sumOf { floor(it.length.toDouble() / regionLen).toLong() }
+        check(topRegions < genomeRegions) {
+            "Too many top regions $topRegions > $genomeRegions"
         }
 
         val comparator = Comparator<Triple<Chromosome, Int, Double>> { o1, o2 -> o2.third.compareTo(o1.third) }
         val regionCoverages: MinMaxPriorityQueue<Triple<Chromosome, Int, Double>> =
             MinMaxPriorityQueue
                 .orderedBy(comparator)
-                .maximumSize(top_regions)
+                .maximumSize(topRegions)
                 .create()
         var regions = 0
         var blackListIgnored = 0
         for (chr in limitedQuery.get()) {
-            for (i in 0 until floor(chr.length.toDouble() / region_len).toInt()) {
+            for (i in 0 until floor(chr.length.toDouble() / regionLen).toInt()) {
                 regions += 1
-                val start = region_len * i
-                val end = region_len * (i + 1)
+                val start = regionLen * i
+                val end = regionLen * (i + 1)
                 // Ignore blackList regions
                 if (blackList != null && blackList.intersects(Location(start, end, chr))) {
                     blackListIgnored++
@@ -513,19 +521,19 @@ object SpanResultsAnalysis {
         val regionCoveragesArray = regionCoverages.toTypedArray()
         regionCoveragesArray.sortWith(comparator)
 
-        val step = if (regionCoveragesArray.size > work_regions) {
-            LOG.debug("Pick $work_regions / $top_regions uniform regions for computation speedup")
-            ceil(regionCoveragesArray.size.toDouble() / work_regions).toInt()
+        val step = if (regionCoveragesArray.size > workRegions) {
+            LOG.debug("Pick $workRegions / $topRegions uniform regions for computation speedup")
+            ceil(regionCoveragesArray.size.toDouble() / workRegions).toInt()
         } else
             1
 
-        val stdMeans = DoubleArray(work_regions)
+        val stdMeans = DoubleArray(workRegions)
         for (i in regionCoveragesArray.indices) {
             if (i % step != 0) {
                 continue
             }
             val (chr, start, _) = regionCoveragesArray[i]
-            val stats = DoubleArray(region_len / resolution) {
+            val stats = DoubleArray(regionLen / resolution) {
                 coverage(
                     chr, start + it * resolution, start + (it + 1) * resolution,
                     treatmentCoverage, controlCoverage, controlScale, beta
@@ -536,51 +544,6 @@ object SpanResultsAnalysis {
             stdMeans[i / step] = if (mean > 0) std / mean else 0.0
         }
         return stdMeans.average()
-    }
-
-
-    private fun computeSignalToControlAverage(
-        genomeQuery: GenomeQuery,
-        fitInfo: OmnipeakFitInformation,
-        candidates: GenomeMap<List<Range>>,
-        parallel: Boolean
-    ): Double {
-        val canEstimateSignalToNoise = fitInfo is OmnipeakAnalyzeFitInformation &&
-                fitInfo.normalizedCoverageQueries!!.all { it.areCachesPresent() }
-        if (!canEstimateSignalToNoise) {
-            return 0.0
-        }
-        val signalToControls = AtomicDouble()
-        val signalToControlsN = AtomicInteger()
-        // Optimization to avoid synchronized lazy on NormalizedCoverageQuery#treatmentReads
-        // Replacing calls NormalizedCoverageQuery#score and NormalizedCoverageQuery#controlScore
-        val treatmentCovs = (fitInfo as OmnipeakAnalyzeFitInformation)
-            .normalizedCoverageQueries!!.map { it.treatmentReads.get() }
-        val controlCovs = fitInfo.normalizedCoverageQueries!!.map { it.controlReads!!.get() }
-        val controlScales = fitInfo.normalizedCoverageQueries!!.map { it.coveragesNormalizedInfo.controlScale }
-
-        genomeQuery.get().map { chromosome ->
-            Callable {
-                if (!fitInfo.containsChromosomeInfo(chromosome) || chromosome !in candidates) {
-                    return@Callable
-                }
-                val offsets = fitInfo.offsets(chromosome)
-                candidates[chromosome].forEach { (from, to) ->
-                    val start = offsets[from]
-                    val end = if (to < offsets.size) offsets[to] else chromosome.length
-                    val chromosomeRange = ChromosomeRange(start, end, chromosome)
-                    // val score = fitInfo.score(chromosomeRange)
-                    val score = OmnipeakAnalyzeFitInformation.fastScore(treatmentCovs, chromosomeRange)
-                    // val controlScore = fitInfo.controlScore(chromosomeRange)
-                    val controlScore =
-                        OmnipeakAnalyzeFitInformation.fastControlScore(controlCovs, controlScales, chromosomeRange)
-                    val ratio = if (controlScore != 0.0) score / controlScore else 0.0
-                    signalToControls.addAndGet(ratio)
-                    signalToControlsN.addAndGet(1)
-                }
-            }
-        }.await(parallel)
-        return if (signalToControls.get() > 0) signalToControls.get() / signalToControls.get() else 0.0
     }
 
 
@@ -642,6 +605,39 @@ object SpanResultsAnalysis {
         } else {
             tc
         }
+    }
+
+
+    fun computeSignalToControlAverage(
+        genomeQuery: GenomeQuery,
+        fitInfo: OmnipeakFitInformation,
+        candidates: GenomeMap<List<Range>>,
+        parallel: Boolean
+    ): Double {
+        val coverageComputable = (fitInfo as OmnipeakAnalyzeFitInformation).getTreatmentControlComputable()
+        if (coverageComputable == null) {
+            return 0.0
+        }
+        val signalToControls = AtomicDouble()
+        val signalToControlsN = AtomicInteger()
+        genomeQuery.get().map { chromosome ->
+            Callable {
+                if (!fitInfo.containsChromosomeInfo(chromosome) || chromosome !in candidates) {
+                    return@Callable
+                }
+                val offsets = fitInfo.offsets(chromosome)
+                candidates[chromosome].forEach { (from, to) ->
+                    val start = offsets[from]
+                    val end = if (to < offsets.size) offsets[to] else chromosome.length
+                    val chromosomeRange = ChromosomeRange(start, end, chromosome)
+                    val (score, controlScore) = coverageComputable(chromosomeRange)
+                    val ratio = if (controlScore != 0.0) score / controlScore else 0.0
+                    signalToControls.addAndGet(ratio)
+                    signalToControlsN.addAndGet(1)
+                }
+            }
+        }.await(parallel)
+        return if (signalToControls.get() > 0) signalToControls.get() / signalToControls.get() else 0.0
     }
 
 }

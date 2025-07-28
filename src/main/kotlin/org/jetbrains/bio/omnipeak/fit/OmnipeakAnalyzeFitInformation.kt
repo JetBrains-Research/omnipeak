@@ -4,14 +4,13 @@ import org.jetbrains.bio.dataframe.DataFrame
 import org.jetbrains.bio.genome.Chromosome
 import org.jetbrains.bio.genome.ChromosomeRange
 import org.jetbrains.bio.genome.GenomeQuery
-import org.jetbrains.bio.genome.coverage.Coverage
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.genome.query.CachingQuery
 import org.jetbrains.bio.genome.query.Query
-import org.jetbrains.bio.omnipeak.coverage.NormalizedCoverageQuery
-import org.jetbrains.bio.omnipeak.coverage.binnedCoverageDataFrame
-import org.jetbrains.bio.util.deleteIfExists
+import org.jetbrains.bio.omnipeak.InputFormat
+import org.jetbrains.bio.omnipeak.coverage.BigWigBinnedCoverageQuery
+import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
+import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.util.isAccessible
 import org.jetbrains.bio.util.reduceIds
 import org.jetbrains.bio.util.stemGz
@@ -27,7 +26,7 @@ import org.jetbrains.bio.util.stemGz
 data class OmnipeakAnalyzeFitInformation(
     override val build: String,
     override val paths: List<OmnipeakDataPaths>,
-    override val explicitFormat: ReadsFormat?,
+    override val explicitFormat: InputFormat?,
     val labels: List<String>,
     override val fragment: Fragment,
     override val unique: Boolean,
@@ -38,7 +37,7 @@ data class OmnipeakAnalyzeFitInformation(
     constructor(
         genomeQuery: GenomeQuery,
         paths: List<OmnipeakDataPaths>,
-        explicitFormat: ReadsFormat?,
+        explicitFormat: InputFormat?,
         labels: List<String>,
         fragment: Fragment,
         unique: Boolean,
@@ -58,28 +57,28 @@ data class OmnipeakAnalyzeFitInformation(
             prepareData()
             return object : CachingQuery<Chromosome, DataFrame>() {
                 override fun getUncached(input: Chromosome): DataFrame {
-                    return normalizedCoverageQueries!!.binnedCoverageDataFrame(
-                        input, binSize, labels.toTypedArray()
+                    return binnedCoverageQueries!!.binnedCoverageDataFrame(
+                        input, labels.toTypedArray()
                     )
                 }
 
                 override val id: String
                     get() = reduceIds(
-                        normalizedCoverageQueries!!.zip(labels)
+                        binnedCoverageQueries!!.zip(labels)
                             .flatMap { (s, l) -> listOf(s.id, l) } + listOf(binSize.toString())
                     )
             }
         }
 
     @Transient
-    var normalizedCoverageQueries: List<NormalizedCoverageQuery>? = null
+    var binnedCoverageQueries: List<BinnedCoverageQuery>? = null
 
     override fun prepareData() {
-        if (normalizedCoverageQueries == null) {
+        if (binnedCoverageQueries == null) {
             val pathsPresent = paths.all { it.treatment.isAccessible() && it.control?.isAccessible() != false }
             if (pathsPresent) {
-                normalizedCoverageQueries = paths.map {
-                    NormalizedCoverageQuery(
+                binnedCoverageQueries = paths.map {
+                    BinnedCoverageQuery.create(
                         genomeQuery(),
                         it.treatment,
                         it.control,
@@ -87,12 +86,9 @@ data class OmnipeakAnalyzeFitInformation(
                         fragment,
                         unique,
                         binSize,
+                        forceCaching = true,
                         showLibraryInfo = true
-                    ).apply {
-                        // Force computing caches
-                        treatmentReads.get()
-                        controlReads?.get()
-                    }
+                    )
                 }
             }
         }
@@ -102,24 +98,23 @@ data class OmnipeakAnalyzeFitInformation(
      * Returns average coverage by tracks
      */
     override fun score(chromosomeRange: ChromosomeRange): Double {
-        check(normalizedCoverageQueries != null) { "Score is not available, use prepareData first!" }
-        return normalizedCoverageQueries!!.sumOf { it.score(chromosomeRange) } /
-                normalizedCoverageQueries!!.size
+        check(binnedCoverageQueries != null) { "Score is not available, use prepareData first!" }
+        return binnedCoverageQueries!!.sumOf { it.score(chromosomeRange) } /
+                binnedCoverageQueries!!.size
     }
 
     override fun isControlAvailable(): Boolean =
-        normalizedCoverageQueries?.all { it.controlReads != null } ?: false
+        binnedCoverageQueries?.all { it.controlAvailable() } ?: false
 
     override fun controlScore(chromosomeRange: ChromosomeRange): Double {
         check(isControlAvailable()) { "Control is not available" }
-        return normalizedCoverageQueries!!.sumOf { it.controlScore(chromosomeRange) } /
-                normalizedCoverageQueries!!.size
+        return binnedCoverageQueries!!.sumOf { it.controlScore(chromosomeRange) } /
+                binnedCoverageQueries!!.size
     }
 
     override fun cleanCaches() {
-        normalizedCoverageQueries?.forEach {
-            it.treatmentReads.npzPath().deleteIfExists()
-            it.controlReads?.npzPath()?.deleteIfExists()
+        binnedCoverageQueries?.forEach {
+            it.cleanCaches()
         }
     }
 
@@ -161,6 +156,86 @@ data class OmnipeakAnalyzeFitInformation(
         return null
     }
 
+    fun getTreatmentComputable(): ((ChromosomeRange) -> Double)? {
+        val query = this.binnedCoverageQueries!!.first()
+        when (query) {
+            is NormalizedBinnedCoverageQuery -> {
+                val bncq = this.binnedCoverageQueries!! as List<NormalizedBinnedCoverageQuery>
+                if (!bncq.all { it.areCachesPresent() }) {
+                    return null
+                }
+
+                // Optimization to avoid synchronized lazy on NormalizedCoverageQuery#treatmentReads
+                // Replacing calls NormalizedCoverageQuery#score and NormalizedCoverageQuery#controlScore
+                val treatmentCoverages = bncq.map { it.ncq.treatmentReads.get() }
+                return { chromosomeRange: ChromosomeRange ->
+                    // val score = fitInfo.score(chromosomeRange)
+                    treatmentCoverages.sumOf { it.getBothStrandsCoverage(chromosomeRange) }.toDouble() /
+                            treatmentCoverages.size
+                }
+            }
+
+            is BigWigBinnedCoverageQuery -> {
+                val bncq = this.binnedCoverageQueries!! as List<BigWigBinnedCoverageQuery>
+                return { chromosomeRange: ChromosomeRange ->
+                    // val score = fitInfo.score(chromosomeRange)
+                    bncq.sumOf { it.score(chromosomeRange) } / bncq.size
+                }
+            }
+
+            else -> {
+                throw IllegalStateException("Unexpected binned coverage query: ${query::class.java.simpleName}")
+            }
+        }
+    }
+
+    fun getTreatmentControlComputable(): ((ChromosomeRange) -> Pair<Double, Double>)? {
+        val query = this.binnedCoverageQueries!!.first()
+        when (query) {
+            is NormalizedBinnedCoverageQuery -> {
+                val bncq = this.binnedCoverageQueries!! as List<NormalizedBinnedCoverageQuery>
+                if (!bncq.all { it.areCachesPresent() }) {
+                    return null
+                }
+
+                // Optimization to avoid synchronized lazy on NormalizedCoverageQuery#treatmentReads
+                // Replacing calls NormalizedCoverageQuery#score and NormalizedCoverageQuery#controlScore
+                val treatmentCoverages = bncq.map { it.ncq.treatmentReads.get() }
+                val controlCoverages = bncq.map { it.ncq.controlReads?.get() }
+                val controlScales = bncq.map { it.ncq.coveragesNormalizedInfo.controlScale }
+                return { chromosomeRange: ChromosomeRange ->
+                    // val score = fitInfo.score(chromosomeRange)
+                    val score =
+                        treatmentCoverages.sumOf { it.getBothStrandsCoverage(chromosomeRange) }.toDouble() /
+                                treatmentCoverages.size
+                    // val controlScore = fitInfo.controlScore(chromosomeRange)
+                    val controlScore =
+                        controlCoverages.zip(controlScales)
+                            .sumOf { (c, s) -> if (c != null) c.getBothStrandsCoverage(chromosomeRange) * s else 0.0 } /
+                                controlCoverages.size
+                    score to controlScore
+                }
+            }
+
+            is BigWigBinnedCoverageQuery -> {
+                val bncq = this.binnedCoverageQueries!! as List<BigWigBinnedCoverageQuery>
+                return { chromosomeRange: ChromosomeRange ->
+                    // val score = fitInfo.score(chromosomeRange)
+                    val score = bncq.sumOf { it.score(chromosomeRange) } / bncq.size
+                    // val controlScore = fitInfo.controlScore(chromosomeRange)
+                    val controlScore =
+                        bncq.sumOf { if (it.controlAvailable()) it.controlScore(chromosomeRange) else 0.0 } / bncq.size
+                    score to controlScore
+                }
+            }
+
+            else -> {
+                throw IllegalStateException("Unexpected binned coverage query: ${query::class.java.simpleName}")
+            }
+        }
+    }
+
+
     companion object {
         @Suppress("MayBeConstant", "unused")
         @Transient
@@ -190,14 +265,20 @@ data class OmnipeakAnalyzeFitInformation(
         fun createFitInformation(
             genomeQuery: GenomeQuery,
             paths: List<OmnipeakDataPaths>,
-            explicitFormat: ReadsFormat?,
+            explicitFormat: InputFormat?,
             labels: List<String>,
             fragment: Fragment,
             unique: Boolean,
             binSize: Int
         ): OmnipeakAnalyzeFitInformation {
             val genomeQueryWithData =
-                OmnipeakModelFitExperiment.filterGenomeQueryWithData(genomeQuery, paths, explicitFormat, fragment, unique)
+                OmnipeakModelFitExperiment.filterGenomeQueryWithData(
+                    genomeQuery,
+                    paths,
+                    explicitFormat,
+                    fragment,
+                    unique
+                )
             return OmnipeakAnalyzeFitInformation(
                 genomeQueryWithData.build,
                 paths,
@@ -209,25 +290,5 @@ data class OmnipeakAnalyzeFitInformation(
                 OmnipeakFitInformation.chromSizes(genomeQueryWithData)
             )
         }
-
-        /**
-         * Optimization to avoid synchronized lazy on NormalizedCoverageQuery#treatmentReads
-         * Replacing calls NormalizedCoverageQuery#score with non-blocked direct realization
-         */
-        fun fastScore(treatmentCoverages: List<Coverage>, range: ChromosomeRange) =
-            treatmentCoverages.sumOf { it.getBothStrandsCoverage(range) }.toDouble() / treatmentCoverages.size
-
-        /**
-         * Optimization to avoid synchronized lazy on NormalizedCoverageQuery#controlReads
-         * Replacing calls NormalizedCoverageQuery#controlScore with non-blocked direct realization
-         */
-        fun fastControlScore(
-            controlCoverages: List<Coverage>,
-            controlScales: List<Double>,
-            chromosomeRange: ChromosomeRange
-        ) = controlCoverages.zip(controlScales)
-            .sumOf { (c, s) -> c.getBothStrandsCoverage(chromosomeRange) * s } / controlCoverages.size
-
-
     }
 }

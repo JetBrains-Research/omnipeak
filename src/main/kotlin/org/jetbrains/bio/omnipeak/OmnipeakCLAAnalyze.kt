@@ -8,7 +8,6 @@ import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.PeaksInfo
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.coverage.FixedFragment
-import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.checkGenomeInFitInformation
 import org.jetbrains.bio.omnipeak.SpanResultsAnalysis.doDeepAnalysis
@@ -424,7 +423,7 @@ object OmnipeakCLAAnalyze {
             else
                 null
             LOG.info("CHROMOSOMES: ${chromosomesToProcess?.joinToString(", ")}")
-            val explicitFormat: ReadsFormat? = OmnipeakCLA.readsFormat(options, log = true)
+            val explicitFormat: InputFormat? = OmnipeakCLA.readsFormat(options, log = true)
             val fragment = OmnipeakCLA.getFragment(options, log = true)
             val unique = OmnipeakCLA.getUnique(options, log = true)
             val bin = OmnipeakCLA.getBin(options, log = true)

@@ -2,7 +2,7 @@ package org.jetbrains.bio.omnipeak.fit
 
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.genome.format.ReadsFormat
+import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_HARD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED
@@ -40,7 +40,7 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
 ) : OmnipeakModelFitExperiment<ConstrainedNBZHMM, OmnipeakCompareFitInformation, ZLHID>(
     fitInformation,
     ConstrainedNBZHMM.fitter(fitInformation.data1.size, fitInformation.data2.size), ConstrainedNBZHMM::class.java,
-    ZLHID.values(), NullHypothesis.of(ZLHID.same()),
+    ZLHID.entries.toTypedArray(), NullHypothesis.of(ZLHID.same()),
     threshold, maxIterations,
     null, false, false
 ) {
@@ -97,7 +97,7 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
             genomeQuery: GenomeQuery,
             paths1: List<OmnipeakDataPaths>,
             paths2: List<OmnipeakDataPaths>,
-            explicitFormat: ReadsFormat?,
+            explicitFormat: InputFormat?,
             bin: Int,
             fragment: Fragment,
             unique: Boolean,

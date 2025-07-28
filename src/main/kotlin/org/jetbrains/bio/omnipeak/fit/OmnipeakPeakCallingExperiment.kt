@@ -3,7 +3,7 @@ package org.jetbrains.bio.omnipeak.fit
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.AutoFragment
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.genome.format.ReadsFormat
+import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FIT_MAX_ITERATIONS
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FIT_THRESHOLD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_ESTIMATE_SNR
@@ -66,7 +66,7 @@ class OmnipeakPeakCallingExperiment<Model : ClassificationModel> private constru
         fun getExperiment(
             genomeQuery: GenomeQuery,
             paths: List<OmnipeakDataPaths>,
-            explicitFormat: ReadsFormat?,
+            explicitFormat: InputFormat?,
             fragment: Fragment = AutoFragment,
             unique: Boolean = true,
             bin: Int,

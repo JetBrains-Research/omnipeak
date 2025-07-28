@@ -4,12 +4,16 @@ import org.jetbrains.bio.Tests.assertIn
 import org.jetbrains.bio.Tests.assertMatches
 import org.jetbrains.bio.experiment.Configuration
 import org.jetbrains.bio.genome.Genome
+import org.jetbrains.bio.genome.Genome.Companion.TEST_ORGANISM_BUILD
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.Location
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.AutoFragment
 import org.jetbrains.bio.genome.format.BedFormat
+import org.jetbrains.bio.genome.query.ReadsQuery
+import org.jetbrains.bio.genome.toQuery
+import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
 import org.jetbrains.bio.omnipeak.coverage.CoverageSampler.sampleCoverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
@@ -753,6 +757,79 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
             }
         }
     }
+
+    @Test
+    fun analyzeSampledBigWigEnrichment() {
+        withTempFile("track", ".bed.gz") { path ->
+            val enrichedRegions = genomeMap(TO) {
+                val enriched = BitSet()
+                if (it.name == "chr1") {
+                    enriched.set(1000, 2000)
+                }
+                enriched
+            }
+
+            val zeroRegions = genomeMap(TO) {
+                val zeroes = BitSet()
+                if (it.name == "chr1") {
+                    zeroes[3000] = 4000
+                }
+                zeroes
+            }
+            sampleCoverage(
+                path,
+                TO,
+                OMNIPEAK_DEFAULT_BIN,
+                enrichedRegions,
+                zeroRegions,
+                goodQuality = true
+            )
+            println("Saved sampled track file: $path")
+            val genome = Genome["to1"]
+            val genomeQuery = genome.toQuery()
+            val coverage = ReadsQuery(genomeQuery, path, null).get()
+
+            withTempDirectory("work") { dir ->
+                val bigWigPath = dir / "data.bw"
+                BigWigCoverageWriter.write(
+                    { cr -> coverage.getBothStrandsCoverage(cr) },
+                    genomeQuery,
+                    OMNIPEAK_DEFAULT_BIN,
+                    bigWigPath
+                )
+                val bedPath = dir / "result.bed"
+                OmnipeakCLA.main(
+                    arrayOf(
+                        "analyze",
+                        "-cs", genome.chromSizesPath.toString(),
+                        "-w", dir.toString(),
+                        "--peaks", bedPath.toString(),
+                        "-fdr", OMNIPEAK_DEFAULT_FDR.toString(),
+                        "-t", bigWigPath.toString()
+                    )
+                )
+                // Check created bed file
+                assertTrue(
+                    Location(
+                        1100 * OMNIPEAK_DEFAULT_BIN,
+                        1900 * OMNIPEAK_DEFAULT_BIN,
+                        TO.get().first()
+                    )
+                            in LocationsMergingList.load(TO, bedPath),
+                    "Expected location not found in called peaks"
+                )
+                // Check correct log file name
+                val logPath = Configuration.logsPath / "${bedPath.stem}.log"
+                assertTrue(logPath.exists, "Log file not found")
+                val log = FileReader(logPath.toFile()).use { it.readText() }
+                assertIn("Signal mean:", log)
+                assertIn("Noise mean:", log)
+                assertIn("Signal to noise:", log)
+                assertTrue(log.substringAfter("Signal to noise:").substringBefore("\n").trim().toDouble() > 5)
+            }
+        }
+    }
+
 
     @Test
     fun analyzeSampledEnrichmentReplicated() {

@@ -10,11 +10,14 @@ import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.Fragment
 import org.jetbrains.bio.genome.query.Query
+import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation.Companion.chromSizes
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation.Companion.load
-import org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM
 import org.jetbrains.bio.statistics.gson.GSONUtil
-import org.jetbrains.bio.util.*
+import org.jetbrains.bio.util.bufferedWriter
+import org.jetbrains.bio.util.createDirectories
+import org.jetbrains.bio.util.reduceIds
+import org.jetbrains.bio.util.toPath
 import java.lang.reflect.Type
 import java.math.RoundingMode
 import java.nio.file.Path
@@ -268,4 +271,20 @@ interface OmnipeakFitInformation {
         }
 
     }
+}
+
+/**
+ * Calculates the binned coverage DataFrame for a list of normalized coverage queries.
+ * Using clip percentile may slightly help to avoid out-of-range during model fit.
+ */
+fun List<BinnedCoverageQuery>.binnedCoverageDataFrame(
+    chromosome: Chromosome,
+    labels: Array<String>,
+): DataFrame {
+    var res = DataFrame()
+    forEachIndexed { d, inputQuery ->
+        val binnedCoverage = inputQuery.apply(chromosome)
+        res = res.with(labels[d], binnedCoverage)
+    }
+    return res
 }

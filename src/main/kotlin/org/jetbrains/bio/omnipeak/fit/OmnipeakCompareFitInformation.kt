@@ -6,12 +6,10 @@ import org.jetbrains.bio.genome.Chromosome
 import org.jetbrains.bio.genome.ChromosomeRange
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.genome.query.CachingQuery
 import org.jetbrains.bio.genome.query.Query
-import org.jetbrains.bio.omnipeak.coverage.NormalizedCoverageQuery
-import org.jetbrains.bio.omnipeak.coverage.binnedCoverageDataFrame
-import org.jetbrains.bio.util.deleteIfExists
+import org.jetbrains.bio.omnipeak.InputFormat
+import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
 import org.jetbrains.bio.util.reduceIds
 
 data class OmnipeakCompareFitInformation(
@@ -20,7 +18,7 @@ data class OmnipeakCompareFitInformation(
     val data2: List<OmnipeakDataPaths>,
     val labels1: List<String>,
     val labels2: List<String>,
-    val explicitFormat: ReadsFormat?,
+    val explicitFormat: InputFormat?,
     val fragment: Fragment,
     val unique: Boolean,
     override val binSize: Int,
@@ -33,11 +31,11 @@ data class OmnipeakCompareFitInformation(
     override val dataQuery: Query<Chromosome, DataFrame>
         get() {
             prepareData()
-            val queries = normalizedCoverageQueries1!! + normalizedCoverageQueries2!!
+            val queries = binnedCoverageQueries1!! + binnedCoverageQueries2!!
             val labels = labels1 + labels2
             return object : CachingQuery<Chromosome, DataFrame>() {
                 override fun getUncached(input: Chromosome): DataFrame {
-                    return queries.binnedCoverageDataFrame(input, binSize, labels.toTypedArray())
+                    return queries.binnedCoverageDataFrame(input, labels.toTypedArray())
                 }
 
                 override val id: String
@@ -49,15 +47,15 @@ data class OmnipeakCompareFitInformation(
         }
 
     @Transient
-    var normalizedCoverageQueries1: List<NormalizedCoverageQuery>? = null
+    var binnedCoverageQueries1: List<BinnedCoverageQuery>? = null
 
     @Transient
-    var normalizedCoverageQueries2: List<NormalizedCoverageQuery>? = null
+    var binnedCoverageQueries2: List<BinnedCoverageQuery>? = null
 
     override fun prepareData() {
-        if (normalizedCoverageQueries1 == null) {
-            normalizedCoverageQueries1 = data1.map {
-                NormalizedCoverageQuery(
+        if (binnedCoverageQueries1 == null) {
+            binnedCoverageQueries1 = data1.map {
+                BinnedCoverageQuery.create(
                     genomeQuery(),
                     it.treatment,
                     it.control,
@@ -65,13 +63,14 @@ data class OmnipeakCompareFitInformation(
                     fragment,
                     unique,
                     binSize,
+                    forceCaching = true,
                     showLibraryInfo = false
                 )
             }
         }
-        if (normalizedCoverageQueries2 == null) {
-            normalizedCoverageQueries2 = data2.map {
-                NormalizedCoverageQuery(
+        if (binnedCoverageQueries2 == null) {
+            binnedCoverageQueries2 = data2.map {
+                BinnedCoverageQuery.create(
                     genomeQuery(),
                     it.treatment,
                     it.control,
@@ -79,6 +78,7 @@ data class OmnipeakCompareFitInformation(
                     fragment,
                     unique,
                     binSize,
+                    forceCaching = true,
                     showLibraryInfo = false
                 )
             }
@@ -93,16 +93,16 @@ data class OmnipeakCompareFitInformation(
      * Return log2 fold change of average summary coverage across data
      */
     override fun score(chromosomeRange: ChromosomeRange): Double {
-        check(normalizedCoverageQueries1 != null && normalizedCoverageQueries2 != null) {
+        check(binnedCoverageQueries1 != null && binnedCoverageQueries2 != null) {
             "Please use prepareData before!"
         }
 
-        return if (normalizedCoverageQueries1!!.all { it.areCachesPresent() } &&
-            normalizedCoverageQueries2!!.all { it.areCachesPresent() }) {
-            val score1 = normalizedCoverageQueries1!!.sumOf { it.apply(chromosomeRange) }
-                .toDouble() / normalizedCoverageQueries1!!.size
-            val score2 = normalizedCoverageQueries2!!.sumOf { it.apply(chromosomeRange) }
-                .toDouble() / normalizedCoverageQueries2!!.size
+        return if (binnedCoverageQueries1!!.all { it.areCachesPresent() } &&
+            binnedCoverageQueries2!!.all { it.areCachesPresent() }) {
+            val score1 = binnedCoverageQueries1!!.sumOf { it.controlNormalizedScore(chromosomeRange) }
+                .toDouble() / binnedCoverageQueries1!!.size
+            val score2 = binnedCoverageQueries2!!.sumOf { it.controlNormalizedScore(chromosomeRange) }
+                .toDouble() / binnedCoverageQueries2!!.size
             if (score2 != 0.0) DoubleMath.log2(score1) - DoubleMath.log2(score2) else Double.MAX_VALUE
         } else {
             0.0
@@ -110,21 +110,19 @@ data class OmnipeakCompareFitInformation(
     }
 
     override fun controlScore(chromosomeRange: ChromosomeRange): Double {
-        check(normalizedCoverageQueries1 != null && normalizedCoverageQueries2 != null) {
+        check(binnedCoverageQueries1 != null && binnedCoverageQueries2 != null) {
             "Please use prepareData before!"
         }
-        return normalizedCoverageQueries2!!.sumOf { it.score(chromosomeRange) } /
-                normalizedCoverageQueries2!!.size
+        return binnedCoverageQueries2!!.sumOf { it.score(chromosomeRange) } /
+                binnedCoverageQueries2!!.size
     }
 
     override fun cleanCaches() {
-        normalizedCoverageQueries1?.forEach {
-            it.treatmentReads.npzPath().deleteIfExists()
-            it.controlReads?.npzPath()?.deleteIfExists()
+        binnedCoverageQueries1?.forEach {
+            it.cleanCaches()
         }
-        normalizedCoverageQueries2?.forEach {
-            it.treatmentReads.npzPath().deleteIfExists()
-            it.controlReads?.npzPath()?.deleteIfExists()
+        binnedCoverageQueries2?.forEach {
+            it.cleanCaches()
         }
     }
 
@@ -176,7 +174,7 @@ data class OmnipeakCompareFitInformation(
             paths2: List<OmnipeakDataPaths>,
             labels1: List<String>,
             labels2: List<String>,
-            explicitFormat: ReadsFormat?,
+            explicitFormat: InputFormat?,
             fragment: Fragment,
             unique: Boolean,
             binSize: Int

@@ -1,14 +1,14 @@
 package org.jetbrains.bio.omnipeak.fit
 
+import org.jetbrains.bio.big.BigWigFile
 import org.jetbrains.bio.dataframe.DataFrame
 import org.jetbrains.bio.experiment.Experiment
 import org.jetbrains.bio.genome.Chromosome
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.genome.query.ReadsQuery
-import org.jetbrains.bio.omnipeak.SPAN2
+import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.SPAN2.toOmnipeak
 import org.jetbrains.bio.omnipeak.fit.OmnipeakModelFitExperiment.Companion.loadResults
 import org.jetbrains.bio.statistics.Preprocessed
@@ -224,7 +224,7 @@ abstract class OmnipeakModelFitExperiment<
                 modelPath.deleteIfExists()
                 LOG.info("Model is not saved")
             }
-            computedResults!!
+            computedResults
         } else {
             val loadedResults = loadResults(genomeQuery, modelPath)
             val loadedFitInfo = loadedResults.fitInfo
@@ -261,23 +261,62 @@ abstract class OmnipeakModelFitExperiment<
         fun filterGenomeQueryWithData(
             genomeQuery: GenomeQuery,
             paths: List<OmnipeakDataPaths>,
-            explicitFormat: ReadsFormat?,
+            explicitFormat: InputFormat?,
             fragment: Fragment,
             unique: Boolean = true
         ): GenomeQuery {
+            val format = explicitFormat ?: InputFormat.guess(paths[0].treatment)
+            check(format != null) { "Failed to guess format for ${paths[0].treatment}" }
             val chromosomes = genomeQuery.get()
             val nonEmptyChromosomes = hashSetOf<Chromosome>()
-            paths.forEach { (t, c) ->
-                val coverage =
-                    ReadsQuery(genomeQuery, t, explicitFormat, unique, fragment, showLibraryInfo = false).get()
-                if (c != null) {
-                    // we have to be sure that the control coverage cache is calculated for the full genome query,
-                    // otherwise we can get some very hard-to-catch bugs later
-                    ReadsQuery(genomeQuery, c, explicitFormat, unique, fragment, showLibraryInfo = false).get()
+            when (format) {
+                InputFormat.BIGWIG -> {
+                    paths.forEach { (t, c) ->
+                        val coverage = BigWigFile.read(t)
+                        val controlCoverage = if (c != null) BigWigFile.read(c) else null
+                        // we have to be sure that the control coverage cache is calculated for the full genome query,
+                        // otherwise we can get some very hard-to-catch bugs later
+                        nonEmptyChromosomes.addAll(
+                            chromosomes.filter { coverage.chromosomes.containsValue(it.name) &&
+                                    coverage.summarize(it.name)[0].sum > 0 &&
+                                    (controlCoverage == null ||
+                                            controlCoverage.chromosomes.containsValue(it.name) &&
+                                            controlCoverage.summarize(it.name)[0].sum > 0)}
+                        )
+                    }
                 }
-                nonEmptyChromosomes.addAll(
-                    chromosomes.filter { coverage.getBothStrandsCoverage(it.chromosomeRange) > 0 }
-                )
+                else -> {
+                    paths.forEach { (t, c) ->
+                        val coverage =
+                            ReadsQuery(
+                                genomeQuery,
+                                t,
+                                format.internalReadsFormat,
+                                unique,
+                                fragment,
+                                showLibraryInfo = false
+                            ).get()
+                        val controlCoverage = if (c != null) {
+                            ReadsQuery(
+                                genomeQuery,
+                                c,
+                                format.internalReadsFormat,
+                                unique,
+                                fragment,
+                                showLibraryInfo = false
+                            ).get()
+                        } else null
+                        // we have to be sure that the control coverage cache is calculated for the full genome query,
+                        // otherwise we can get some very hard-to-catch bugs later
+                        nonEmptyChromosomes.addAll(
+                            chromosomes.filter {
+                                coverage.getBothStrandsCoverage(it.chromosomeRange) > 0 &&
+                                        (controlCoverage == null ||
+                                                controlCoverage.getBothStrandsCoverage(it.chromosomeRange) > 0)
+                            }
+                        )
+                    }
+                }
             }
 
             if (nonEmptyChromosomes.isEmpty()) {

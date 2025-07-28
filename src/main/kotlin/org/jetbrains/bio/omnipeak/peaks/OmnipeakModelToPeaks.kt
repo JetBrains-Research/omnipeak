@@ -11,7 +11,6 @@ import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.containers.toRangeMergingList
-import org.jetbrains.bio.genome.coverage.Coverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_AUTOCORRELATION_MAX_SHIFT
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_CLIP_MAX_LENGTH
@@ -165,7 +164,7 @@ object OmnipeakModelToPeaks {
 
         // Estimate signal and noise average signal by candidates
         val canEstimateSignalToNoise = clip > 0 && fitInfo is OmnipeakAnalyzeFitInformation &&
-                fitInfo.normalizedCoverageQueries?.all { it.areCachesPresent() } ?: false
+                fitInfo.binnedCoverageQueries?.all { it.areCachesPresent() } ?: false
 
         val (avgSignalDensity, avgNoiseDensity) = if (canEstimateSignalToNoise)
             estimateGenomeSignalNoiseAverage(genomeQuery, fitInfo, candidatesMap, parallel).apply {
@@ -204,11 +203,11 @@ object OmnipeakModelToPeaks {
         val peaks = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
             cancellableState?.checkCanceled()
             if (!fitInfo.containsChromosomeInfo(chromosome)) {
-                return@genomeMap emptyList<Peak>()
+                return@genomeMap emptyList()
             }
             val candidates = candidatesMap[chromosome]
             if (candidates.isEmpty()) {
-                return@genomeMap emptyList<Peak>()
+                return@genomeMap emptyList()
             }
             val offsets = fitInfo.offsets(chromosome)
             val (start, end) = chromosomeCandidatesOffsets[chromosome]!!
@@ -614,7 +613,8 @@ object OmnipeakModelToPeaks {
         var i = 0
         var blackListIgnored = 0
         for (chr in limitedQuery.get()) {
-            val logNullPeps = omnipeakFitResults.logNullMemberships[chr.name]!!.f64Array(OmnipeakModelFitExperiment.NULL)
+            val logNullPeps =
+                omnipeakFitResults.logNullMemberships[chr.name]!!.f64Array(OmnipeakModelFitExperiment.NULL)
             for (j in 0 until logNullPeps.length) {
                 val start = j * bin
                 val end = (j + 1) * bin
@@ -793,7 +793,7 @@ object OmnipeakModelToPeaks {
 
         val lnFdr = ln(fdr)
         val canEstimateScore = fitInfo is OmnipeakAnalyzeFitInformation &&
-                fitInfo.normalizedCoverageQueries?.all { it.areCachesPresent() } ?: false
+                fitInfo.binnedCoverageQueries?.all { it.areCachesPresent() } ?: false
         val resultPeaks = candidates.mapIndexedNotNull { i, (from, to) ->
             cancellableState?.checkCanceled()
             val logPValue = logPVals[i]
@@ -847,36 +847,10 @@ object OmnipeakModelToPeaks {
         cancellableState: CancellableState?
     ): F64Array {
         // TODO[oleg] support OmnipeakCompareFitInformation
-        val readsTreatmentAvailable =
-            fitInfo is OmnipeakAnalyzeFitInformation &&
-                    fitInfo.normalizedCoverageQueries?.all { it.areCachesPresent() } ?: false
-        val readsControlAvailable =
-            fitInfo is OmnipeakAnalyzeFitInformation &&
-                    fitInfo.isControlAvailable() &&
-                    fitInfo.normalizedCoverageQueries?.all { it.areCachesPresent() } ?: false
-
-        // Optimization to avoid synchronized lazy on NormalizedCoverageQuery#treatmentReads
-        // Replacing calls NormalizedCoverageQuery#score and NormalizedCoverageQuery#controlScore
-        val treatmentCovs = when {
-            readsTreatmentAvailable && fitInfo is OmnipeakAnalyzeFitInformation ->
-                fitInfo.normalizedCoverageQueries?.map { it.treatmentReads.get() } ?: emptyList()
-
-            else -> emptyList()
-        }
-
-        val controlCovs: List<Coverage>
-        val controlScales: List<Double>
-        when {
-            readsControlAvailable && fitInfo is OmnipeakAnalyzeFitInformation -> {
-                controlCovs = fitInfo.normalizedCoverageQueries!!.map { it.controlReads!!.get() }
-                controlScales = fitInfo.normalizedCoverageQueries!!.map { it.coveragesNormalizedInfo.controlScale }
-            }
-
-            else -> {
-                controlCovs = emptyList()
-                controlScales = emptyList()
-            }
-        }
+        val coverageComputable = if (fitInfo is OmnipeakAnalyzeFitInformation)
+            fitInfo.getTreatmentControlComputable()
+        else
+            null
         val peaksLogPvalues = F64Array(candidates.size) { idx ->
             cancellableState?.checkCanceled()
             val candidate = candidates[idx]
@@ -889,18 +863,15 @@ object OmnipeakModelToPeaks {
             val blocksLogPs = blocks.map { (from, to) ->
                 // Model posterior log error probability for block
                 val modelLogPs = (from until to).sumOf { logNullMemberships[it] }
-                if (!readsTreatmentAvailable || !readsControlAvailable) {
+                if (coverageComputable == null) {
                     return@map modelLogPs
                 }
                 val blockStart = offsets[from]
                 val blockEnd = if (to < offsets.size) offsets[to] else chromosome.length
                 val chromosomeRange = ChromosomeRange(blockStart, blockEnd, chromosome)
                 // val score = fitInfo.score(chromosomeRange)
-                val score = OmnipeakAnalyzeFitInformation.fastScore(treatmentCovs, chromosomeRange)
                 // val controlScore = fitInfo.controlScore(chromosomeRange)
-                val controlScore = OmnipeakAnalyzeFitInformation.fastControlScore(
-                    controlCovs, controlScales, chromosomeRange
-                )
+                val (score, controlScore) = coverageComputable(chromosomeRange)
                 // Use +1 as a pseudo count to compute Poisson CDF
                 val signalLogPs = PoissonUtil.logPoissonCdf(
                     ceil(score).toInt() + 1,
@@ -933,19 +904,18 @@ object OmnipeakModelToPeaks {
         candidates: GenomeMap<List<Range>>,
         parallel: Boolean
     ): Pair<Double, Double> {
-        val canEstimateSignalToNoise = fitInfo is OmnipeakAnalyzeFitInformation &&
-                fitInfo.normalizedCoverageQueries?.all { it.areCachesPresent() } ?: false
-        if (!canEstimateSignalToNoise) {
+        // TODO[oleg] support OmnipeakCompareFitInformation
+        val coverageComputable = if (fitInfo is OmnipeakAnalyzeFitInformation)
+            fitInfo.getTreatmentComputable()
+        else
+            null
+        if (coverageComputable == null) {
             return 0.0 to 0.0
         }
         val sumSignalScoreA = AtomicDouble()
         val sumSignalLengthA = AtomicLong()
         val sumNoiseScoreA = AtomicDouble()
         val sumNoiseLengthA = AtomicLong()
-        // Optimization to avoid synchronized lazy on NormalizedCoverageQuery#treatmentReads
-        // Replacing calls NormalizedCoverageQuery#score and NormalizedCoverageQuery#controlScore
-        val treatmentCovs = (fitInfo as OmnipeakAnalyzeFitInformation)
-            .normalizedCoverageQueries!!.map { it.treatmentReads.get() }
         genomeQuery.get().map { chromosome ->
             Callable {
                 if (!fitInfo.containsChromosomeInfo(chromosome) || chromosome !in candidates) {
@@ -959,12 +929,12 @@ object OmnipeakModelToPeaks {
                     val end = if (to < offsets.size) offsets[to] else chromosome.length
                     val range = ChromosomeRange(start, end, chromosome)
                     // val score = fitInfo.score(range)
-                    val score = OmnipeakAnalyzeFitInformation.fastScore(treatmentCovs, range)
+                    val score = coverageComputable(range)
                     sumSignalScoreA.addAndGet(score)
                     sumSignalLengthA.addAndGet(end.toLong() - start)
                     val rangeNoise = ChromosomeRange(prevNoiseStart, start, chromosome)
                     // val scoreNoise = fitInfo.score(rangeNoise)
-                    val scoreNoise = OmnipeakAnalyzeFitInformation.fastScore(treatmentCovs, rangeNoise)
+                    val scoreNoise = coverageComputable(rangeNoise)
                     sumNoiseScoreA.addAndGet(scoreNoise)
                     sumNoiseLengthA.addAndGet(start.toLong() - prevNoiseStart)
                     prevNoiseStart = end
@@ -972,7 +942,7 @@ object OmnipeakModelToPeaks {
                 if (prevNoiseStart < chromosome.length) {
                     val rangeNoise = ChromosomeRange(prevNoiseStart, chromosome.length, chromosome)
                     // val scoreNoise = fitInfo.score(rangeNoise)
-                    val scoreNoise = OmnipeakAnalyzeFitInformation.fastScore(treatmentCovs, rangeNoise)
+                    val scoreNoise = coverageComputable(rangeNoise)
                     sumNoiseScoreA.addAndGet(scoreNoise)
                     sumNoiseLengthA.addAndGet(chromosome.length.toLong() - prevNoiseStart)
                 }

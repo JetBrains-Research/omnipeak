@@ -40,7 +40,7 @@ class OmnipeakModelFitExperimentTest {
                 listOf("foo"), AutoFragment, true, 200
             ).dataQuery
 
-            assertTrue(dataQuery.id.startsWith("${path.stemGz}_foo_200"))
+            assertTrue(dataQuery.id.startsWith("${path.stemGz}_binned_foo_200"))
             val df = dataQuery.apply(Chromosome(Genome["to1"], "chr1"))
             assertEquals("[foo]", df.labels.toList().toString())
         }

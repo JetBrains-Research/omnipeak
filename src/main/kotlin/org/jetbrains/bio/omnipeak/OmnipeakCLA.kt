@@ -6,7 +6,6 @@ import org.jetbrains.bio.experiment.Configuration
 import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.coverage.AutoFragment
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.omnipeak.fit.AbstractOmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
@@ -110,7 +109,7 @@ compare                         Differential peak calling
             acceptsAll(
                 listOf("fmt", "format"),
                 "Supported formats of input files: ${
-                    ReadsFormat.entries.joinToString(", ") { it.name }
+                    InputFormat.values().joinToString(", ") { it.name }
                 }. Text format can be in zip or gzip archive"
             ).withRequiredArg()
             acceptsAll(
@@ -265,10 +264,10 @@ compare                         Differential peak calling
         return property
     }
 
-    internal fun readsFormat(options: OptionSet, log: Boolean): ReadsFormat? {
-        var explicitFormat: ReadsFormat? = null
+    internal fun readsFormat(options: OptionSet, log: Boolean): InputFormat? {
+        var explicitFormat: InputFormat? = null
         if ("format" in options) {
-            explicitFormat = ReadsFormat.valueOf(options.valueOf("format") as String)
+            explicitFormat = InputFormat.valueOf(options.valueOf("format") as String)
             if (log) LOG.info("FORMAT: $explicitFormat")
         } else {
             if (log) LOG.info("FORMAT: auto")
@@ -363,4 +362,3 @@ compare                         Differential peak calling
     }
 
 }
-
