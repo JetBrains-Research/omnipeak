@@ -316,13 +316,13 @@ object OmnipeakModelToPeaks {
         cancellableState?.checkCanceled()
 
         LOG.info("${name ?: ""} Analyzing candidates by sensitivity...")
-        val (sensitivities, candidatesLogNs, candidatesLogALs) = getSensitivitiesAndCandidatesCharacteristics(
+        val (sensitivities, candidatesNs, candidatesALs) = getSensitivitiesAndCandidatesCharacteristics(
             genomeQuery,
             omnipeakFitResults,
             logNullMembershipsMap,
             bitList2reuseMap
         )
-        val st = detectSensitivityTriangle(sensitivities, candidatesLogNs, candidatesLogALs)
+        val st = detectSensitivityTriangle(sensitivities, candidatesNs, candidatesALs)
         cancellableState?.checkCanceled()
         if (st != null) {
             LOG.debug("${name ?: ""} Analyzing candidates additive numbers...")
@@ -372,43 +372,55 @@ object OmnipeakModelToPeaks {
      */
     fun detectSensitivityTriangle(
         sensitivities: DoubleArray,
-        candidatesLogNs: DoubleArray,
-        candidatesLogALs: DoubleArray
+        candidatesNs: IntArray,
+        candidatesALs: DoubleArray
     ): SensitivityInfo? {
         LOG.debug("Compute sensitivity triangle...")
+        val logNs = DoubleArray(candidatesNs.size) {ln1p(candidatesNs[it].toDouble())}
+        val logALs = DoubleArray(candidatesALs.size) {ln1p(candidatesALs[it])}
         val n = sensitivities.size
         var maxArea = 0.0
         var i1 = -1
         var i2 = -1
         var i3 = -1
-        for (i in (n * 0.2).toInt()..(n * 0.8).toInt()) {
+        for (i in (n * 0.1).toInt()..(n * 0.9).toInt()) {
             val i1mab = findSensitivityTriangleMaxAreaBetween(
-                candidatesLogNs, candidatesLogALs, 0, i, -1
+                logNs, logALs, 0, i, -1
             )
             val i3mab = findSensitivityTriangleMaxAreaBetween(
-                candidatesLogNs, candidatesLogALs, i, n - 1, -1
+                logNs, logALs, i, n - 1, -1
             )
             if (i1mab.first == -1 || i3mab.first == -1) {
+                continue
+            }
+            // Manually check the angle i1-i2-i3
+            val i1check = i1mab.first
+            val i2check = i
+            val i3check = i3mab.first
+            if (triangleSignedSquare(
+                    logNs[i1check], logALs[i1check],
+                    logNs[i2check], logALs[i2check],
+                    logNs[i3check], logALs[i3check]) < 0) {
                 continue
             }
             // We want both parts to be balanced so geometric mean optimization is better here
             val area = sqrt(i1mab.second * i3mab.second)
             if (area > maxArea) {
                 maxArea = area
-                i1 = i1mab.first
-                i3 = i3mab.first
-                i2 = i
+                i1 = i1check
+                i2 = i2check
+                i3 = i3check
             }
         }
         if (i1 == -1 || i2 == -1 || i3 == -1) {
             return null
         }
         // Update i3, i1 points to be closer to i2 for more accurate pivot estimations
-        val i3mab = findSensitivityTriangleMaxAreaBetween(candidatesLogNs, candidatesLogALs, i3, i2, -1)
+        val i3mab = findSensitivityTriangleMaxAreaBetween(logNs, logALs, i3, i2, -1)
         if (i3mab.first != -1) {
             i3 = i3mab.first
         }
-        val i1mab = findSensitivityTriangleMaxAreaBetween(candidatesLogNs, candidatesLogALs, i2, i1, -1)
+        val i1mab = findSensitivityTriangleMaxAreaBetween(logNs, logALs, i2, i1, -1)
         if (i1mab.first != -1) {
             i1 = i1mab.first
         }
@@ -425,7 +437,7 @@ object OmnipeakModelToPeaks {
         omnipeakFitResults: OmnipeakFitResults,
         logNullMembershipsMap: GenomeMap<F64Array>,
         bitList2reuseMap: GenomeMap<BitList>
-    ): Triple<DoubleArray, DoubleArray, DoubleArray> {
+    ): Triple<DoubleArray, IntArray, DoubleArray> {
         val minLogNull = genomeQuery.get().minOf { logNullMembershipsMap[it].min() }
         // Limit value due to floating point errors
         val maxLogNull = min(OMNIPEAK_MIN_SENSITIVITY, genomeQuery.get().maxOf { logNullMembershipsMap[it].max() })
@@ -446,25 +458,26 @@ object OmnipeakModelToPeaks {
         omnipeakFitResults: OmnipeakFitResults,
         logNullMembershipsMap: GenomeMap<F64Array>,
         bitList2reuseMap: GenomeMap<BitList>
-    ): Triple<DoubleArray, DoubleArray, DoubleArray> {
+    ): Triple<DoubleArray, IntArray, DoubleArray> {
         val sensitivities = linSpace(minLogNull, maxLogNull, OMNIPEAK_SENSITIVITY_N)
         // Compute candidates characteristics
-        val (candidatesLogNs, candidatesLogALs) = candidatesNumbersLengths(
+        val (candidatesNs, candidatesALs) = candidatesNumbersLengths(
             sensitivities,
             genomeQuery,
             omnipeakFitResults,
             logNullMembershipsMap,
             bitList2reuseMap
         )
-        val equalTale = candidatesLogNs.indices.reversed().takeWhile {
-            candidatesLogNs[it] == candidatesLogNs.last()
+        val equalTale = candidatesNs.indices.reversed().takeWhile {
+            candidatesNs[it] == candidatesNs.last()
         }.count()
         if (equalTale <= 5) {
-//            println("Sensitivity\tGap\tCandidatesN\tCandidatesAL")
-//            for (i in sensitivities.indices) {
-//                println("${sensitivities[i]}\t0\t${candidatesLogNs[i]}\t${candidatesLogALs[i]}")
-//            }
-            return Triple(sensitivities, candidatesLogNs, candidatesLogALs)
+            LOG.debug("Sensitivity table")
+            println("Sensitivity\tCandidatesN\tCandidatesAL")
+            for (i in sensitivities.indices) {
+                println("${sensitivities[i]}\t${candidatesNs[i]}\t${candidatesALs[i]}")
+            }
+            return Triple(sensitivities, candidatesNs, candidatesALs)
         }
         return getSensitivitiesAndCandidatesCharacteristics(
             minLogNull,
@@ -483,19 +496,19 @@ object OmnipeakModelToPeaks {
         omnipeakFitResults: OmnipeakFitResults,
         logNullMembershipsMap: GenomeMap<F64Array>,
         bitList2reuseMap: GenomeMap<BitList>
-    ): Pair<DoubleArray, DoubleArray> {
+    ): Pair<IntArray, DoubleArray> {
         val n = sensitivities.size
-        val candidatesLogNs = DoubleArray(n)
-        val candidatesLogALs = DoubleArray(n)
+        val candidatesNs = IntArray(n)
+        val candidatesALs = DoubleArray(n)
         for ((i, s) in sensitivities.withIndex()) {
             val ci = estimateCandidatesNumberLens(
                 genomeQuery, omnipeakFitResults.fitInfo, logNullMembershipsMap, bitList2reuseMap,
                 s, 0
             )
-            candidatesLogNs[i] = ln1p(ci.n.toDouble())
-            candidatesLogALs[i] = ln1p(ci.averageLen)
+            candidatesNs[i] = ci.n
+            candidatesALs[i] = ci.averageLen
         }
-        return Pair(candidatesLogNs, candidatesLogALs)
+        return Pair(candidatesNs, candidatesALs)
     }
 
     fun linSpace(min: Double, max: Double, n: Int): DoubleArray {
