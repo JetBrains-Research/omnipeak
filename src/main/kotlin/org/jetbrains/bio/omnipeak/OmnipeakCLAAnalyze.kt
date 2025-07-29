@@ -233,16 +233,16 @@ object OmnipeakCLAAnalyze {
                 }
 
                 // Finally get results
-                val (actualModelPath, spanResults) = lazyResults.value
-                val fitInfo = spanResults.fitInfo
+                val (actualModelPath, results) = lazyResults.value
+                val fitInfo = results.fitInfo
                 check(fitInfo is AbstractOmnipeakAnalyzeFitInformation) {
                     "Expected ${OmnipeakAnalyzeFitInformation::class.java.simpleName}, got ${fitInfo::class.java.name}"
                 }
-                val aboutModel = spanResults.modelInformation(actualModelPath)
+                val aboutModel = results.modelInformation(actualModelPath)
                 LOG.info(aboutModel.joinToString("\n") { (k, v) ->
                     "${k.name}: ${k.render(v)}"
                 })
-                LOG.debug(spanResults.model.toString())
+                LOG.debug(results.model.toString())
 
                 val genomeQuery = fitInfo.genomeQuery()
                 val fragment = fitInfo.fragment
@@ -256,7 +256,7 @@ object OmnipeakCLAAnalyze {
                 if (peaksPath != null) {
                     val peaks =
                         OmnipeakModelToPeaks.getPeaks(
-                            spanResults, genomeQuery, fdr, multipleTesting,
+                            results, genomeQuery, fdr, multipleTesting,
                             sensitivity, gap, summits,
                             fragmentationLight, fragmentationHard, fragmentationSpeed,
                             clip = clip,
@@ -286,7 +286,7 @@ object OmnipeakCLAAnalyze {
                         fitInfo.prepareData()
                         doDeepAnalysis(
                             actualModelPath,
-                            spanResults,
+                            results,
                             fitInfo,
                             genomeQuery,
                             fdr,
