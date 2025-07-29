@@ -34,7 +34,7 @@ Peak calling
 To analyze a single (possibly replicated) biological condition use `analyze` command. See details with command:
 
 ```bash
-$ java -jar omnipeak.jar analyze --help
+$ java --add-modules=jdk.incubator.vector -jar omnipeak.jar analyze --help
 ```
 
 The `<output.bed>` file will contain predicted and FDR-controlled peaks in the
