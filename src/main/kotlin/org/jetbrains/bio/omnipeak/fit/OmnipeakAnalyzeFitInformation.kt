@@ -54,7 +54,7 @@ data class OmnipeakAnalyzeFitInformation(
 
     override val dataQuery: Query<Chromosome, DataFrame>
         get() {
-            prepareData()
+            check(scoresAvailable()) { "Scores are not available!" }
             return object : CachingQuery<Chromosome, DataFrame>() {
                 override fun getUncached(input: Chromosome): DataFrame {
                     return binnedCoverageQueries!!.binnedCoverageDataFrame(
@@ -94,11 +94,16 @@ data class OmnipeakAnalyzeFitInformation(
         }
     }
 
+    override fun scoresAvailable(): Boolean {
+        prepareData()
+        return binnedCoverageQueries != null
+    }
+
     /**
      * Returns average coverage by tracks
      */
     override fun score(chromosomeRange: ChromosomeRange): Double {
-        check(binnedCoverageQueries != null) { "Score is not available, use prepareData first!" }
+        check(scoresAvailable()) { "Scores are not available!" }
         return binnedCoverageQueries!!.sumOf { it.score(chromosomeRange) } /
                 binnedCoverageQueries!!.size
     }
@@ -157,6 +162,9 @@ data class OmnipeakAnalyzeFitInformation(
     }
 
     fun getTreatmentComputable(): ((ChromosomeRange) -> Double)? {
+        if (!scoresAvailable()) {
+            return null
+        }
         val query = this.binnedCoverageQueries!!.first()
         when (query) {
             is NormalizedBinnedCoverageQuery -> {
@@ -190,6 +198,9 @@ data class OmnipeakAnalyzeFitInformation(
     }
 
     fun getTreatmentControlComputable(): ((ChromosomeRange) -> Pair<Double, Double>)? {
+        if (!scoresAvailable()) {
+            return null
+        }
         val query = this.binnedCoverageQueries!!.first()
         when (query) {
             is NormalizedBinnedCoverageQuery -> {

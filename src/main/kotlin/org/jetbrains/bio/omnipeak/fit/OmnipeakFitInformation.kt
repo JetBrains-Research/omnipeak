@@ -63,6 +63,8 @@ interface OmnipeakFitInformation {
      */
     fun prepareData()
 
+    fun scoresAvailable(): Boolean
+
     /**
      * Computes range score, either coverage for analyze experiment or log2 fold change for difference.
      * Call [prepareData] beforehand!

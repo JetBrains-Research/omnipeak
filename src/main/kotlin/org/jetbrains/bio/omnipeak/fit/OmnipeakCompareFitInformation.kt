@@ -30,7 +30,7 @@ data class OmnipeakCompareFitInformation(
 
     override val dataQuery: Query<Chromosome, DataFrame>
         get() {
-            prepareData()
+            check(scoresAvailable()) { "Scores are not available!" }
             val queries = binnedCoverageQueries1!! + binnedCoverageQueries2!!
             val labels = labels1 + labels2
             return object : CachingQuery<Chromosome, DataFrame>() {
@@ -85,18 +85,20 @@ data class OmnipeakCompareFitInformation(
         }
     }
 
+    override fun scoresAvailable(): Boolean {
+        prepareData()
+        return binnedCoverageQueries1 != null && binnedCoverageQueries2 != null
+    }
+
     override fun isControlAvailable(): Boolean {
-        return true
+        return scoresAvailable()
     }
 
     /**
      * Return log2 fold change of average summary coverage across data
      */
     override fun score(chromosomeRange: ChromosomeRange): Double {
-        check(binnedCoverageQueries1 != null && binnedCoverageQueries2 != null) {
-            "Please use prepareData before!"
-        }
-
+        check(scoresAvailable()) { "Scores are not available!" }
         return if (binnedCoverageQueries1!!.all { it.areCachesPresent() } &&
             binnedCoverageQueries2!!.all { it.areCachesPresent() }) {
             val score1 = binnedCoverageQueries1!!.sumOf { it.controlNormalizedScore(chromosomeRange) }
@@ -110,9 +112,7 @@ data class OmnipeakCompareFitInformation(
     }
 
     override fun controlScore(chromosomeRange: ChromosomeRange): Double {
-        check(binnedCoverageQueries1 != null && binnedCoverageQueries2 != null) {
-            "Please use prepareData before!"
-        }
+        check(isControlAvailable()) { "Control is not available" }
         return binnedCoverageQueries2!!.sumOf { it.score(chromosomeRange) } /
                 binnedCoverageQueries2!!.size
     }
