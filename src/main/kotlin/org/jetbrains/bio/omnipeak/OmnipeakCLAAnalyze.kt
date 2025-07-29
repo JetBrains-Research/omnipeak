@@ -388,7 +388,9 @@ object OmnipeakCLAAnalyze {
             }
             prepareAndCheckTreatmentControlPaths(options, results.fitInfo, log = true)
             val blacklistPath = options.valueOf("blacklist") as Path?
-            LOG.info("BLACKLIST FILE: $blacklistPath")
+            if (blacklistPath != null) {
+                LOG.info("BLACKLIST FILE: $blacklistPath")
+            }
             val workingDir = options.valueOf("workdir") as Path
             LOG.info("WORKING DIR: $workingDir")
             val chromSizesPath = options.valueOf("chrom.sizes") as Path?
@@ -397,7 +399,9 @@ object OmnipeakCLAAnalyze {
                 options.valueOf("chromosomes").toString().split(',', ' ')
             else
                 null
-            LOG.info("CHROMOSOMES: ${chromosomesToProcess?.joinToString(", ")}")
+            if (chromosomesToProcess != null) {
+                LOG.info("CHROMOSOMES: ${chromosomesToProcess.joinToString(", ")}")
+            }
             if (chromSizesPath != null) {
                 checkGenomeInFitInformation(chromSizesPath, results.fitInfo)
             }

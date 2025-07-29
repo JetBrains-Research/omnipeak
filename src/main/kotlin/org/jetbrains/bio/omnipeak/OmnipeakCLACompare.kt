@@ -145,7 +145,10 @@ object  OmnipeakCLACompare {
                     OMNIPEAK_DEFAULT_MULTIPLE_TEST_CORRECTION
                 LOG.info("MULTIPLE TEST CORRECTION: ${multipleTesting.description}")
 
-                val blackListPath = options.valueOf("blacklist") as Path?
+                val blacklistPath = options.valueOf("blacklist") as Path?
+                if (blacklistPath != null) {
+                    LOG.info("BLACKLIST FILE: $blacklistPath")
+                }
 
                 if (peaksPath != null) {
                     val peaks = OmnipeakModelToPeaks.getPeaks(
@@ -157,7 +160,7 @@ object  OmnipeakCLACompare {
                         OMNIPEAK_DEFAULT_FRAGMENTATION_HARD,
                         OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED,
                         clip = clip,
-                        blackListPath = blackListPath,
+                        blackListPath = blacklistPath,
                         name = peaksPath.fileName.stem
                     )
                     LOG.info("${peaksPath.fileName.stem} format chromosome, start, end, name, score, strand, foldchange, -log(p), -log(q)")

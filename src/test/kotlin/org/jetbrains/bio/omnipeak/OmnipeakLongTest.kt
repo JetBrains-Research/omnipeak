@@ -489,7 +489,7 @@ PEAKS: $peaksPath
                             )
                         )
                     }
-                    assertIn("Completed loading model: ${modelPath.stem}", reloadOut)
+                    assertIn("MODEL: $modelPath", reloadOut)
                     assertEquals("", reloadErr)
 
                     val (_, invalidErr) = Logs.captureLoggingOutput {

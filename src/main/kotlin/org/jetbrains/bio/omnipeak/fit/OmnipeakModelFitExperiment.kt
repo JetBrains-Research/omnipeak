@@ -339,7 +339,7 @@ abstract class OmnipeakModelFitExperiment<
             genomeQuery: GenomeQuery? = null,
             modelPath: Path
         ): OmnipeakFitResults {
-            LOG.info("Loading model: $modelPath")
+            LOG.debug("Loading model: {}", modelPath)
             return withTempDirectory(modelPath.stem) { dir ->
                 LOG.debug("Started model file decompress: ${modelPath.stem}")
                 Tar.decompress(modelPath, dir.toFile())
@@ -360,11 +360,11 @@ abstract class OmnipeakModelFitExperiment<
                 val logNullMembershipsMap = info.split(logNullMembershipsDF, genomeQuery)
                 var statesDfMap: Map<String, DataFrame>? = null
                 val statesPath = dir / "states.npz"
-                LOG.info("Loading states data frame ${modelPath.stem}")
+                LOG.debug("Loading states data frame ${modelPath.stem}")
                 if (statesPath.exists) {
                     statesDfMap = info.split(DataFrame.load(statesPath), genomeQuery)
                 }
-                LOG.info("Completed loading model: ${modelPath.stem}")
+                LOG.debug("Completed loading model: ${modelPath.stem}")
                 return@withTempDirectory OmnipeakFitResults(info, model, logNullMembershipsMap, statesDfMap)
             }
         }

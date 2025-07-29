@@ -97,7 +97,7 @@ object OmnipeakModelToPeaks {
         val bitList2reuseMap = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
             BitList(logNullMembershipsMap[chromosome].length)
         }
-        val sensitivity2use = if (sensitivityCmdArg != null) {
+        val (sensitivity, sensitivitySummits) = if (sensitivityCmdArg != null) {
             sensitivityCmdArg to null
         } else {
             estimateSensitivity(
@@ -113,9 +113,9 @@ object OmnipeakModelToPeaks {
             } else null
 
         if (summits) {
-            LOG.info("${name ?: ""} Selecting candidates with sensitivity: ${sensitivity2use.first}, summits: ${sensitivity2use.second}")
+            LOG.info("${name ?: ""} Selecting candidates with sensitivity: $sensitivity, summits: $sensitivitySummits")
         } else {
-            LOG.info("${name ?: ""} Selecting candidates with sensitivity: $sensitivity2use")
+            LOG.info("${name ?: ""} Selecting candidates with sensitivity: $sensitivity")
         }
 
         val gap2use = when {
@@ -126,7 +126,7 @@ object OmnipeakModelToPeaks {
                 val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP) {
                     estimateCandidatesNumberLens(
                         genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
-                        sensitivity2use.first, it
+                        sensitivity, it
                     ).n
                 }
                 estimateGap(candidateGapNs, name, fragmentationLight, fragmentationHard, fragmentationSpeed)
@@ -143,7 +143,7 @@ object OmnipeakModelToPeaks {
             val bitList2reuse = bitList2reuseMap[chromosome]
             getChromosomeCandidates(
                 chromosome, logNullMemberships, bitList2reuse,
-                sensitivity2use.first, sensitivity2use.second, gap2use
+                sensitivity, sensitivitySummits, gap2use
             )
         }
 
@@ -158,7 +158,7 @@ object OmnipeakModelToPeaks {
         // Return empty list when nothing found
         if (candidatesTotal == 0) {
             return OmnipeakResult(
-                fdr, sensitivity2use.first, sensitivity2use.second, gap2use,
+                fdr, sensitivity, sensitivitySummits, gap2use,
                 genomeMap(genomeQuery) { emptyList() })
         }
 
@@ -221,7 +221,7 @@ object OmnipeakModelToPeaks {
                 cancellableState = cancellableState
             )
         }
-        return OmnipeakResult(fdr, sensitivity2use.first, sensitivity2use.second, gap2use, peaks)
+        return OmnipeakResult(fdr, sensitivity, sensitivitySummits, gap2use, peaks)
     }
 
     private fun collectPVals(
