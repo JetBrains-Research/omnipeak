@@ -376,14 +376,18 @@ object OmnipeakModelToPeaks {
         candidatesALs: DoubleArray
     ): SensitivityInfo? {
         LOG.debug("Compute sensitivity triangle...")
-        val logNs = DoubleArray(candidatesNs.size) {ln1p(candidatesNs[it].toDouble())}
-        val logALs = DoubleArray(candidatesALs.size) {ln1p(candidatesALs[it])}
+        require(sensitivities.size == candidatesNs.size)
+        require(sensitivities.size == candidatesALs.size)
+        val logNs = DoubleArray(candidatesNs.size) { ln1p(candidatesNs[it].toDouble()) }
+        val logALs = DoubleArray(candidatesALs.size) { ln1p(candidatesALs[it]) }
         val n = sensitivities.size
         var maxArea = 0.0
         var i1 = -1
         var i2 = -1
         var i3 = -1
-        for (i in (n * 0.1).toInt()..(n * 0.9).toInt()) {
+        val im1 = (n * 0.2).toInt()
+        val im2 = sensitivities.indices.maxBy { logNs[it] } - 1
+        for (i in im1..im2) {
             val i1mab = findSensitivityTriangleMaxAreaBetween(
                 logNs, logALs, 0, i, -1
             )
@@ -393,23 +397,13 @@ object OmnipeakModelToPeaks {
             if (i1mab.first == -1 || i3mab.first == -1) {
                 continue
             }
-            // Manually check the angle i1-i2-i3
-            val i1check = i1mab.first
-            val i2check = i
-            val i3check = i3mab.first
-            if (triangleSignedSquare(
-                    logNs[i1check], logALs[i1check],
-                    logNs[i2check], logALs[i2check],
-                    logNs[i3check], logALs[i3check]) < 0) {
-                continue
-            }
             // We want both parts to be balanced so geometric mean optimization is better here
             val area = sqrt(i1mab.second * i3mab.second)
             if (area > maxArea) {
                 maxArea = area
-                i1 = i1check
-                i2 = i2check
-                i3 = i3check
+                i1 = i1mab.first
+                i2 = i
+                i3 = i3mab.first
             }
         }
         if (i1 == -1 || i2 == -1 || i3 == -1) {
@@ -468,10 +462,10 @@ object OmnipeakModelToPeaks {
             logNullMembershipsMap,
             bitList2reuseMap
         )
-        val equalTale = candidatesNs.indices.reversed().takeWhile {
+        val equalTail = candidatesNs.indices.reversed().takeWhile {
             candidatesNs[it] == candidatesNs.last()
         }.count()
-        if (equalTale <= 5) {
+        if (equalTail <= 5) {
             LOG.debug("Sensitivity table")
             println("Sensitivity\tCandidatesN\tCandidatesAL")
             for (i in sensitivities.indices) {
@@ -481,7 +475,7 @@ object OmnipeakModelToPeaks {
         }
         return getSensitivitiesAndCandidatesCharacteristics(
             minLogNull,
-            sensitivities[sensitivities.size - equalTale + 1],
+            sensitivities[sensitivities.size - equalTail + 1],
             genomeQuery,
             omnipeakFitResults,
             logNullMembershipsMap,
