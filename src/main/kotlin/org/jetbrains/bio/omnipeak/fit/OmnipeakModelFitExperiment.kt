@@ -278,10 +278,10 @@ abstract class OmnipeakModelFitExperiment<
                         // otherwise we can get some very hard-to-catch bugs later
                         nonEmptyChromosomes.addAll(
                             chromosomes.filter { coverage.chromosomes.containsValue(it.name) &&
-                                    coverage.summarize(it.name)[0].sum > 0 &&
+                                    coverage.summarize(it.name)[0].sum != 0.0 &&
                                     (controlCoverage == null ||
                                             controlCoverage.chromosomes.containsValue(it.name) &&
-                                            controlCoverage.summarize(it.name)[0].sum > 0)}
+                                            controlCoverage.summarize(it.name)[0].sum != 0.0)}
                         )
                     }
                 }

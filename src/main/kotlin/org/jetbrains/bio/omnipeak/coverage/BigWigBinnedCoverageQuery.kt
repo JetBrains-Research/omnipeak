@@ -141,6 +141,7 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
             chrLength,
             binsCount
         )
+        checkNonNegative(treatmentCoverage, "Treatment")
 
         // Convert summaries to IntArray
         if (!controlAvailable()) {
@@ -160,12 +161,20 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
             chrLength,
             binsCount
         )
+        checkNonNegative(controlCoverage, "Control")
+
         return IntArray(binsCount) { i ->
             if (i < treatmentCoverage.size) {
                 max(0.0, treatmentCoverage[i].value() - controlCoverage[i].value() * controlScale).toInt()
             } else {
                 0
             }
+        }
+    }
+
+    private fun checkNonNegative(coverage: List<BigSummary>, title: String) {
+        coverage.forEach {
+            check(it.sum >= 0) {"$title: negative values detected"}
         }
     }
 

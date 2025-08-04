@@ -830,6 +830,63 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
 
 
     @Test
+    fun checkNegativeBigWig() {
+        withTempFile("track", ".bed.gz") { path ->
+            val enrichedRegions = genomeMap(TO) {
+                val enriched = BitSet()
+                if (it.name == "chr1") {
+                    enriched.set(1000, 2000)
+                }
+                enriched
+            }
+
+            val zeroRegions = genomeMap(TO) {
+                val zeroes = BitSet()
+                if (it.name == "chr1") {
+                    zeroes[3000] = 4000
+                }
+                zeroes
+            }
+            sampleCoverage(
+                path,
+                TO,
+                OMNIPEAK_DEFAULT_BIN,
+                enrichedRegions,
+                zeroRegions,
+                goodQuality = true
+            )
+            println("Saved sampled track file: $path")
+            val genome = Genome["to1"]
+            val genomeQuery = genome.toQuery()
+            val coverage = ReadsQuery(genomeQuery, path, null).get()
+
+            withTempDirectory("work") { dir ->
+                val bigWigPath = dir / "data.bw"
+                BigWigCoverageWriter.write(
+                    { cr -> -coverage.getBothStrandsCoverage(cr) },
+                    genomeQuery,
+                    OMNIPEAK_DEFAULT_BIN,
+                    bigWigPath
+                )
+                val bedPath = dir / "result.bed"
+                val (out, _) = Logs.captureLoggingOutput {
+                    OmnipeakCLA.main(
+                        arrayOf(
+                            "analyze",
+                            "-cs", genome.chromSizesPath.toString(),
+                            "-w", dir.toString(),
+                            "-t", bigWigPath.toString(),
+                            "--peaks", bedPath.toString(),
+                        )
+                    )
+                }
+                assert("negative values detected" in out)
+            }
+        }
+    }
+
+
+    @Test
     fun analyzeSampledEnrichmentReplicated() {
         val enrichedRegions = genomeMap(TO) {
             val enriched = BitSet()
