@@ -44,13 +44,23 @@ class NB2ZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray) :
 
         // You wanna keep em separated!
         for (d in 0 until numDimensions) {
-            val lowState = getEmissionScheme(1, d) as NegBinEmissionScheme
-            val highState = getEmissionScheme(2, d) as NegBinEmissionScheme
+            var lowState = getEmissionScheme(1, d) as NegBinEmissionScheme
+            var highState = getEmissionScheme(2, d) as NegBinEmissionScheme
 
             // Need to update transients in case of any change
             var updated = false
 
-            val snrPrevious = highState.mean / lowState.mean
+            // Check for switch first
+            var snrPrevious = highState.mean / lowState.mean
+            if (snrPrevious < 1) {
+                LOG.info("Signal-to-noise ratio $snrPrevious < 1, fixing...")
+                statesSwitched = true
+                flipStatesIfNecessary(negBinEmissionSchemes, logPriorProbabilities, logTransitionProbabilities)
+                lowState = getEmissionScheme(1, d) as NegBinEmissionScheme
+                highState = getEmissionScheme(2, d) as NegBinEmissionScheme
+                snrPrevious = highState.mean / lowState.mean
+                updated = true
+            }
 
             val lowVariance = lowState.variance // Variance is computed from mean, failures, memoize
             val highVariance = highState.variance // Variance is computed from mean, failures, memoize
@@ -82,12 +92,8 @@ class NB2ZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray) :
             val snr = highState.mean / lowState.mean
 
             when {
-                // This check is required mostly for narrow marks to guard decent signal-to-noise ratio
                 snr < guess.signalToNoise -> {
-                    if (snrPrevious < 1) {
-                        LOG.info("Signal-to-noise ratio $snrPrevious < 1, fixing...")
-                        statesSwitched = true
-                    } else if (snrPrevious < guess.signalToNoise) {
+                    if (snrPrevious < guess.signalToNoise) {
                         LOG.info("Signal-to-noise ratio $snrPrevious < ${guess.signalToNoise}, fixing...")
                         outOfSignalToNoiseRatioRangeDown = true
                     } else {

@@ -234,13 +234,12 @@ PEAKS: $peaksPath
                             "--workdir", it.toString(),
                             "-t", path.toString(),
                             "--bin", "200",
-                            "--it", "20",
                             "--debug"
                         )
                     )
                 }
-                assertTrue("After fitting the model, emission's parameter p in LOW state" in out)
-                assertTrue("Low quality of data detected after fitting the model." in out)
+                assertTrue("Emission's parameter p in LOW state" in out)
+                assertTrue("Low quality of data detected during fitting the model." in out)
             }
         }
     }
@@ -292,7 +291,6 @@ PEAKS: $peaksPath
                             "--workdir", it.toString(),
                             "-t", path.toString(),
                             "--format", "BAM",
-                            "--keep-cache"
                         )
                     )
                 }

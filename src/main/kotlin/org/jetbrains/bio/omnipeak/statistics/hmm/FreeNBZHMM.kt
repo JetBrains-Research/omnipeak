@@ -20,7 +20,8 @@ open class FreeNBZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray,
     : MLFreeHMM(nbMeans.size + 1, 1,  priorProbabilities, transitionProbabilities) {
 
     private val zeroEmission: ConstantIntegerEmissionScheme = ConstantIntegerEmissionScheme(0)
-    private val negBinEmissionSchemes: Array<NegBinEmissionScheme> =
+
+    internal val negBinEmissionSchemes: Array<NegBinEmissionScheme> =
         Array(nbMeans.size) { NegBinEmissionScheme(nbMeans[it], nbFailures[it]) }
 
     override fun getEmissionScheme(i: Int, d: Int): IntegerEmissionScheme {
@@ -104,14 +105,14 @@ open class FreeNBZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray,
                     val meanFlipped = meanLow > meanHigh
                     if (meanFlipped) {
                         LOG.debug(
-                            "After fitting the model, mean emission in LOW state ($meanLow) is higher than " +
+                            "Mean emission in LOW state ($meanLow) is higher than " +
                                     "mean emission in HIGH state ($meanHigh)."
                         )
                     }
                     val pFlipped = pLow > pHigh
                     if (pFlipped) {
                         LOG.debug(
-                            "After fitting the model, emission's parameter p in LOW state ($pLow) is higher than " +
+                            "Emission's parameter p in LOW state ($pLow) is higher than " +
                                     "emission's parameter p in HIGH state ($pHigh)."
                         )
                     }
@@ -124,7 +125,7 @@ open class FreeNBZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray,
                             negBinEmissionSchemes, logPriorProbabilities, logTransitionProbabilities
                         )
                     } else if (meanFlipped || pFlipped) {
-                        LOG.warn("Low quality of data detected after fitting the model.")
+                        LOG.warn("Low quality of data detected during fitting the model.")
                     }
                 }
             }
