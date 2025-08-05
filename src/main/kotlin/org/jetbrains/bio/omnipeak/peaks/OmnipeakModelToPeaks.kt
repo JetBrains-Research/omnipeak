@@ -466,10 +466,12 @@ object OmnipeakModelToPeaks {
             candidatesNs[it] == candidatesNs.last()
         }.count()
         if (equalTail <= 5) {
-            LOG.debug("Sensitivity table")
-            println("Sensitivity\tCandidatesN\tCandidatesAL")
-            for (i in sensitivities.indices) {
-                println("${sensitivities[i]}\t${candidatesNs[i]}\t${candidatesALs[i]}")
+            if (LOG.isDebugEnabled) {
+                LOG.debug("Sensitivity table")
+                println("Sensitivity\tCandidatesN\tCandidatesAL")
+                for (i in sensitivities.indices) {
+                    println("${sensitivities[i]}\t${candidatesNs[i]}\t${candidatesALs[i]}")
+                }
             }
             return Triple(sensitivities, candidatesNs, candidatesALs)
         }
