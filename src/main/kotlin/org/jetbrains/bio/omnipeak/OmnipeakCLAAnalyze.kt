@@ -11,6 +11,7 @@ import org.jetbrains.bio.genome.coverage.FixedFragment
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.checkGenomeInFitInformation
 import org.jetbrains.bio.omnipeak.SpanResultsAnalysis.doDeepAnalysis
+import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
 import org.jetbrains.bio.omnipeak.fit.*
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_HARD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT
@@ -48,6 +49,9 @@ object OmnipeakCLAAnalyze {
                 .withRequiredArg()
                 .withValuesSeparatedBy(",")
                 .withValuesConvertedBy(PathConverter.noCheck())
+
+            accepts("bigwig", "Create beta-control corrected counts per million normalized track")
+                .availableIf("peaks")
 
             accepts(
                 "ext",
@@ -169,6 +173,10 @@ object OmnipeakCLAAnalyze {
                 // Call now to preserve params logging order
                 val lazyResults = logParametersAndPrepareLazyResults(options)
 
+                val bigWig = options.contains("bigwig")
+                LOG.info("BIGWIG: $bigWig")
+
+
                 val multipleTesting = if ("multiple" in params)
                     MultipleTesting.valueOf(options.valueOf("multiple") as String)
                 else
@@ -247,6 +255,15 @@ object OmnipeakCLAAnalyze {
                 val genomeQuery = fitInfo.genomeQuery()
                 val fragment = fitInfo.fragment
                 val bin = fitInfo.binSize
+
+                if (bigWig) {
+                    if (fitInfo !is OmnipeakAnalyzeFitInformation) {
+                        LOG.warn("Bigwig coverage is possible only for analyze command")
+                    } else {
+                        val bigWigPath = (peaksPath!!.toString() + ".bw").toPath()
+                        BigWigCoverageWriter.write(results, genomeQuery, bigWigPath, blackListPath)
+                    }
+                }
 
                 if (deepAnalysis) {
                     if (fitInfo !is OmnipeakAnalyzeFitInformation) {
