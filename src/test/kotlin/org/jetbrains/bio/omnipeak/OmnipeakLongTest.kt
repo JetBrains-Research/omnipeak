@@ -790,7 +790,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
             withTempDirectory("work") { dir ->
                 val bigWigPath = dir / "data.bw"
                 BigWigCoverageWriter.write(
-                    { cr -> coverage.getBothStrandsCoverage(cr) },
+                    { cr -> coverage.getBothStrandsCoverage(cr).toDouble() },
                     genomeQuery,
                     OMNIPEAK_DEFAULT_BIN,
                     bigWigPath
@@ -863,7 +863,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
             withTempDirectory("work") { dir ->
                 val bigWigPath = dir / "data.bw"
                 BigWigCoverageWriter.write(
-                    { cr -> -coverage.getBothStrandsCoverage(cr) },
+                    { cr -> -coverage.getBothStrandsCoverage(cr).toDouble() },
                     genomeQuery,
                     OMNIPEAK_DEFAULT_BIN,
                     bigWigPath
