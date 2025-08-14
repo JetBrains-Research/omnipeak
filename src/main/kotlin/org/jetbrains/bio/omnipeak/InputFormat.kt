@@ -21,7 +21,7 @@ enum class InputFormat {
     fun check(path: Path) {
         when (this) {
             BIGWIG -> {
-                if (path.extension !in listOf("bw", "bigwig")) {
+                if (path.extension.lowercase() !in listOf("bw", "bigwig")) {
                     LOG.warn("Unexpected file extension for BIGWIG file: $path, expected bw or bigwig")
                 }
             }
@@ -35,7 +35,7 @@ enum class InputFormat {
 
 
         fun guess(path: Path): InputFormat? =
-            if (path.extension in listOf("bw", "bigwig")) {
+            if (path.extension.lowercase() in listOf("bw", "bigwig")) {
                 BIGWIG
             }
             else {
