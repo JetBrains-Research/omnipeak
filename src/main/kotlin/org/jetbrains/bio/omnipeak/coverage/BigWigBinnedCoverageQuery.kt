@@ -1,5 +1,6 @@
 package org.jetbrains.bio.omnipeak.coverage
 
+import org.apache.commons.math3.stat.descriptive.rank.Percentile
 import org.jetbrains.bio.big.BigSummary
 import org.jetbrains.bio.big.BigWigFile
 import org.jetbrains.bio.genome.Chromosome
@@ -12,6 +13,7 @@ import org.jetbrains.bio.util.stemGz
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * A BinnedQuery implementation that reads coverage data from BigWig files.
@@ -41,25 +43,52 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
 
     // Lazy initialization of BigWig files
     private val treatmentBigWig by lazy { BigWigFile.read(treatmentPath) }
+
     private val treatmentTotalCoverage by lazy { treatmentBigWig.totalSummary.sum }
 
+    private val treatmentTopPercentile by lazy {
+        val percentile = genomeQuery.get().maxOf { chromosome ->
+            // Check if chromosome exists in BigWig file - 0 if chromosome not found
+            val matchedBfChr = findMatchedChromosome(treatmentBigWig, chromosome.name) ?: return@maxOf 0.0
+            // Calculate number of bins
+            val binsCount = chromosome.length / binSize + 1
+            // Use summarize to get coverage data for the entire chromosome
+            val data = treatmentBigWig.summarize(
+                matchedBfChr, 0, chromosome.length, binsCount
+            ).map { it.value() }.toDoubleArray()
+            // Do not use StatUtils.percentile(scores.toArray(), XX) to avoid redundant
+            //   score array copying
+            object : Percentile(TRIM_PERCENTILE_MAX) {
+                // force Percentile not to copy scores
+                override fun getWorkArray(values: DoubleArray?, begin: Int, length: Int) = data
+            }.evaluate(data)
+        }
+        LOG.debug("Treatment top $TRIM_PERCENTILE_MAX percentile: ${"%.3f".format(percentile)}")
+        return@lazy percentile
+    }
+
+    private val treatmentScale by lazy {
+        return@lazy if (treatmentTopPercentile < binSize * MAX_SIGNAL_IN_BIN)
+            1.0
+        else
+            binSize * MAX_SIGNAL_IN_BIN / treatmentTopPercentile
+    }
+
     private val controlBigWig by lazy { controlPath?.let { BigWigFile.read(it) } }
+
     private val controlTotalCoverage by lazy { controlBigWig?.totalSummary?.sum ?: 0.0 }
 
     override fun score(chromosomeRange: ChromosomeRange): Double {
         val chromosome = chromosomeRange.chromosome
         val chrName = chromosome.name
 
-        // Check if chromosome exists in BigWig file
-        val matchedBfChr = findMatchedChromosome(treatmentBigWig, chrName)
-            ?: return 0.0 // Return 0 if chromosome not found
+        // Check if chromosome exists in BigWig file - return 0 if chromosome not found
+        val matchedBfChr =
+            findMatchedChromosome(treatmentBigWig, chrName) ?: return 0.0
 
-        // Use summarize to get coverage data for the range
+        // Use summarize to get coverage data for the range - one bin for the entire range
         val summaries = treatmentBigWig.summarize(
-            matchedBfChr,
-            chromosomeRange.startOffset,
-            chromosomeRange.endOffset,
-            1 // Just one bin for the entire range
+            matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, 1
         )
 
         return if (summaries.isNotEmpty()) {
@@ -79,16 +108,13 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
         val chromosome = chromosomeRange.chromosome
         val chrName = chromosome.name
 
-        // Check if chromosome exists in BigWig file
-        val matchedBfChr = findMatchedChromosome(controlBigWig!!, chrName)
-            ?: return 0.0 // Return 0 if chromosome not found
+        // Check if chromosome exists in BigWig file - 0 if chromosome not found
+        val matchedBfChr =
+            findMatchedChromosome(controlBigWig!!, chrName) ?: return 0.0
 
-        // Use summarize to get coverage data for the range
+        // Use summarize to get coverage data for the range - one bin for the entire range
         val summaries = controlBigWig!!.summarize(
-            matchedBfChr,
-            chromosomeRange.startOffset,
-            chromosomeRange.endOffset,
-            1 // Just one bin for the entire range
+            matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, 1
         )
 
         return if (summaries.isNotEmpty()) {
@@ -103,7 +129,7 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
             return score(chromosomeRange).toInt()
         }
         // Scale control to treatment
-        val controlScale = treatmentTotalCoverage / controlTotalCoverage
+        val controlScale = treatmentTotalCoverage * treatmentScale / controlTotalCoverage
         return max(0.0, score(chromosomeRange) - controlScore(chromosomeRange) * controlScale).toInt()
     }
 
@@ -127,19 +153,16 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
         val chrName = t.name
         val chrLength = t.length
 
-        // Check if chromosome exists in BigWig file
+        // Check if chromosome exists in BigWig file - return empty array if chromosome not found
         val matchedBfChr = findMatchedChromosome(treatmentBigWig, chrName)
-            ?: return IntArray(chrLength / binSize + 1) // Return empty array if chromosome not found
+            ?: return IntArray(chrLength / binSize + 1)
 
         // Calculate number of bins
         val binsCount = chrLength / binSize + 1
 
         // Use summarize to get coverage data for the entire chromosome
         val treatmentCoverage = treatmentBigWig.summarize(
-            matchedBfChr,
-            0,
-            chrLength,
-            binsCount
+            matchedBfChr, 0, chrLength, binsCount
         )
         checkNonNegative(treatmentCoverage, "Treatment")
 
@@ -147,34 +170,36 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
         if (!controlAvailable()) {
             return IntArray(binsCount) { i ->
                 if (i < treatmentCoverage.size) {
-                    treatmentCoverage[i].sum.toInt()
+                    treatmentScore(treatmentCoverage[i].value()).toInt()
                 } else {
                     0
                 }
             }
         }
         // Scale control to treatment
-        val controlScale = treatmentTotalCoverage / controlTotalCoverage
+        val controlScale = treatmentTotalCoverage * treatmentScale/ controlTotalCoverage
         val controlCoverage = controlBigWig!!.summarize(
-            matchedBfChr,
-            0,
-            chrLength,
-            binsCount
+            matchedBfChr, 0, chrLength, binsCount
         )
         checkNonNegative(controlCoverage, "Control")
 
         return IntArray(binsCount) { i ->
             if (i < treatmentCoverage.size) {
-                max(0.0, treatmentCoverage[i].value() - controlCoverage[i].value() * controlScale).toInt()
+                max(0.0, treatmentScore(treatmentCoverage[i].value()) -
+                        controlCoverage[i].value() * controlScale).toInt()
             } else {
                 0
             }
         }
     }
 
+    private fun treatmentScore(value: Double): Double {
+        return if (treatmentScale == 1.0) value else min(value, treatmentTopPercentile) * treatmentScale
+    }
+
     private fun checkNonNegative(coverage: List<BigSummary>, title: String) {
         coverage.forEach {
-            check(it.sum >= 0) {"$title: negative values detected"}
+            check(it.sum >= 0) { "$title: negative values detected" }
         }
     }
 
@@ -202,6 +227,11 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
 
     companion object {
         private val LOG = LoggerFactory.getLogger(BigWigBinnedCoverageQuery::class.java)
+
+        // Equal to AbstractBedTrackView.TRIM_PERCENTILE_MAX = 99.0
+        const val TRIM_PERCENTILE_MAX = 99.0
+
+        const val MAX_SIGNAL_IN_BIN = 2
     }
 }
 
