@@ -19,6 +19,7 @@ import org.jetbrains.bio.util.*
 import org.jetbrains.bio.util.FileSize.Companion.GB
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
+import kotlin.math.max
 
 /**
  * Tool for analyzing and comparing ChIP-Seq data.
@@ -83,17 +84,22 @@ compare                         Differential peak calling
         }
     }
 
+    const val RECOMMENDED_MEMORY_GB = 8
 
-    internal fun checkMemory() {
+    fun isLowMemory(): Boolean {
         val maxMemory = Runtime.getRuntime().maxMemory()
         // [Shpynov] This is a hack: since -Xmx8G results in about 7G max memory available
         // The reason of such a discrepancy is the size of the garbage collector's survivor space.
         // https://stackoverflow.com/questions/23701207/why-do-xmx-and-runtime-maxmemory-not-agree
-        if (maxMemory < 7 * GB) {
+        return maxMemory < (RECOMMENDED_MEMORY_GB - 1) * GB
+    }
+
+    internal fun checkMemory() {
+        if (isLowMemory()) {
             LOG.warn(
                 """
-                    Recommended memory settings ${FileSize(8 * GB)} are not set. Current settings: ${FileSize(maxMemory)}.
-                    Please use java memory option '-Xmx8G' to configure memory available for Omnipeak.""".trimIndent()
+                    Recommended memory settings ${FileSize(RECOMMENDED_MEMORY_GB * GB)} are not set.
+                    Please use java memory option '-Xmx${RECOMMENDED_MEMORY_GB}G' to configure memory available for Omnipeak.""".trimIndent()
             )
         }
     }
