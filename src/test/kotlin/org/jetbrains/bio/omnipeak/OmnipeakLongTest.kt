@@ -4,7 +4,6 @@ import org.jetbrains.bio.Tests.assertIn
 import org.jetbrains.bio.Tests.assertMatches
 import org.jetbrains.bio.experiment.Configuration
 import org.jetbrains.bio.genome.Genome
-import org.jetbrains.bio.genome.Genome.Companion.TEST_ORGANISM_BUILD
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.Location
 import org.jetbrains.bio.genome.containers.LocationsMergingList

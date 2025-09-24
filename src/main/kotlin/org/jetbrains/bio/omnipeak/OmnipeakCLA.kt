@@ -19,7 +19,6 @@ import org.jetbrains.bio.util.*
 import org.jetbrains.bio.util.FileSize.Companion.GB
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
-import kotlin.math.max
 
 /**
  * Tool for analyzing and comparing ChIP-Seq data.
