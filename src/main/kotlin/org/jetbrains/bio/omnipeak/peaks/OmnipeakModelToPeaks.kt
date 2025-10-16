@@ -17,11 +17,8 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_CLIP_MAX_LENGTH
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_CLIP_STEPS
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FDR
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_HARD
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_CHECKPOINT
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_MIN_SENSITIVITY
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SCORE_BLOCKS
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SCORE_BLOCKS_GAP
@@ -72,9 +69,7 @@ object OmnipeakModelToPeaks {
         sensitivityCmdArg: Double?,
         gapCmdArg: Int?,
         summits: Boolean,
-        fragmentationLight: Double,
-        fragmentationHard: Double,
-        fragmentationSpeed: Double,
+        fragmentationThreshold: Int,
         clip: Double,
         blackListPath: Path? = null,
         parallel: Boolean = true,
@@ -123,13 +118,13 @@ object OmnipeakModelToPeaks {
             summits -> 0
             else -> {
                 LOG.info("${name ?: ""} Analysing fragmentation...")
-                val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP) {
+                val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize) {
                     estimateCandidatesNumberLens(
                         genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
                         sensitivity, it
                     ).n
                 }
-                estimateGap(candidateGapNs, name, fragmentationLight, fragmentationHard, fragmentationSpeed)
+                estimateGap(candidateGapNs, name, fitInfo.binSize, fragmentationThreshold)
             }
         }
         LOG.info("${name ?: ""} Candidates selection with gap: $gap2use")
@@ -256,50 +251,39 @@ object OmnipeakModelToPeaks {
         return logPValsMap
     }
 
+    /**
+     * Estimates the fragmentation gap based on candidate data and a fragmentation threshold.
+     * Fragmentation score is computed as the area above the curve of the plot of
+     * candidates number with gap to the candidates number without gap.
+     *
+     * @param candidatesNs Numbers of candidates by gap to use for the fragmentation score estimation.
+     * @param name An optional name or identifier for logging purposes.
+     * @param binSize The model bin size to use for the fragmentation score estimation.
+     * @param fragmentationThresholdBp The fragmentation threshold value which determines if further processing is needed.
+     * @return An integer representing the fragmentation compensation gap.
+     * Returns 0 if no fragmentation is detected.
+     */
     fun estimateGap(
         candidatesNs: IntArray,
         name: String?,
-        fragmentationLight: Double = OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT,
-        fragmentationHard: Double = OMNIPEAK_DEFAULT_FRAGMENTATION_HARD,
-        fragmentationSpeed: Double = OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED,
+        binSize: Int,
+        fragmentationThresholdBp: Int = OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP,
     ): Int {
         val fragmentations = DoubleArray(candidatesNs.size) {
             candidatesNs[it].toDouble() / candidatesNs[0]
         }
-        val tLightFragmentation = (1 until OMNIPEAK_FRAGMENTATION_CHECKPOINT).firstOrNull {
-            fragmentations[it] <= fragmentationLight
-        }
+        // Area above the curve
+        val fragmentationScore = (fragmentations.size - fragmentations.sum())
         LOG.debug(
-            "${name ?: ""} Fragmentation @${OMNIPEAK_FRAGMENTATION_CHECKPOINT} = " +
-                    "${fragmentations[OMNIPEAK_FRAGMENTATION_CHECKPOINT]}"
+            "${name ?: ""} Fragmentation $fragmentationScore"
         )
-        if (tLightFragmentation == null) {
+        if (fragmentationScore < fragmentationThresholdBp / binSize) {
             LOG.info("${name ?: ""} No fragmentation detected!")
             return 0
-        } else {
-            LOG.debug("${name ?: ""} Fragmentation light gap: $tLightFragmentation")
         }
-        val speed = DoubleArray(fragmentations.size - 1) {
-            fragmentations[it + 1] - fragmentations[it]
-        }
-        val tHardFragmentation = fragmentations.indices.firstOrNull {
-            fragmentations[it] <= fragmentationHard
-        }
-        LOG.debug("${name ?: ""} Fragmentation hard gap: $tHardFragmentation")
-        val tSpeedFragmentation = (tLightFragmentation / 2 until speed.size).firstOrNull {
-            abs(speed[it]) < fragmentationSpeed
-        }
-        LOG.debug("${name ?: ""} Fragmentation speed gap: $tSpeedFragmentation")
-        val finalFragmentationGap = when {
-            tHardFragmentation != null && tSpeedFragmentation != null ->
-                min(tHardFragmentation, tSpeedFragmentation)
-
-            tHardFragmentation != null -> tHardFragmentation
-            tSpeedFragmentation != null -> tSpeedFragmentation
-            else -> tLightFragmentation
-        }
-        LOG.info("${name ?: ""} Fragmentation compensation gap: $finalFragmentationGap")
-        return finalFragmentationGap
+        val compensationGap = (fragmentationScore - fragmentationThresholdBp / binSize).toInt()
+        LOG.info("${name ?: ""} Fragmentation compensation gap: $compensationGap")
+        return compensationGap
     }
 
 

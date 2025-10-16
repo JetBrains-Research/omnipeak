@@ -4,9 +4,7 @@ import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.Fragment
 import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_HARD
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_SENSITIVITY
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks
@@ -58,9 +56,7 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
             OMNIPEAK_DEFAULT_SENSITIVITY,
             OMNIPEAK_DEFAULT_GAP,
             false,
-            OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT,
-            OMNIPEAK_DEFAULT_FRAGMENTATION_HARD,
-            OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED,
+            OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP,
             OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL,
         ).peaks
         val highLow = arrayListOf<Peak>()

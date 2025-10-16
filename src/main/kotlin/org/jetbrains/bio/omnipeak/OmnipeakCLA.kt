@@ -106,6 +106,8 @@ compare                         Differential peak calling
 
     /**
      * Create [OptionParser] common for both [analyze] and [compare] procedures.
+     * Provides short version of command line options for essential parameters.
+     * No short version for fine-tuning parameters.
      */
     internal fun getOptionParser(): OptionParser = object : OptionParser() {
         init {
@@ -114,7 +116,7 @@ compare                         Differential peak calling
             acceptsAll(
                 listOf("fmt", "format"),
                 "Supported formats of input files: ${
-                    InputFormat.values().joinToString(", ") { it.name }
+                    InputFormat.entries.joinToString(", ") { it.name }
                 }. Text format can be in zip or gzip archive"
             ).withRequiredArg()
             acceptsAll(
@@ -139,10 +141,8 @@ compare                         Differential peak calling
                 "Chromosome names to process, should be a comma-separated list"
             ).withRequiredArg()
 
-            accepts(
-                "clip",
-                "Clip max threshold for fine-tune boundaries of according to the local signal, 0 to disable"
-            )
+            accepts("clip", "Clip max threshold 0-1 to improve peaks density using local signal coverage.\n" +
+                    "Recommended for TFs, narrow histone marks and ATAC-seq, 0 to disable")
                 .withRequiredArg()
                 .ofType(Double::class.java)
                 .defaultsTo(OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL)
@@ -156,7 +156,7 @@ compare                         Differential peak calling
             ).withRequiredArg().withValuesConvertedBy(PathConverter.noCheck())
 
             acceptsAll(
-                listOf("fragment"),
+                listOf("fr", "fragment"),
                 """
                     Fragment size. If provided, reads are shifted appropriately.
                     --fragment 0 recommended for ATAC-Seq data processing.
@@ -167,7 +167,7 @@ compare                         Differential peak calling
                 .withRequiredArg()
                 .ofType(Int::class.java)
 
-            acceptsAll(listOf("blacklist", "bs"), "Blacklist regions file")
+            acceptsAll(listOf("bl", "blacklist"), "Blacklist regions file")
                 .withRequiredArg()
                 .withValuesConvertedBy(PathConverter.exists())
 
@@ -196,7 +196,9 @@ compare                         Differential peak calling
                 .availableIf("peaks")
                 .withRequiredArg()
                 .ofType(Double::class.java)
-            accepts("summits", "Report summits, recommended for TFs, and ATAC-seq including bulk single-cell data")
+            acceptsAll(
+                listOf("sm", "summits"),
+                "Report summits, recommended for TFs, and ATAC-seq including bulk single-cell data")
             accepts(
                 "gap",
                 "Gap is used for broad histone marks to join adjacent peaks. Estimated from the data"
@@ -214,27 +216,27 @@ compare                         Differential peak calling
                 .withRequiredArg().withValuesConvertedBy(PathConverter.exists())
                 .defaultsTo(System.getProperty("user.dir").toPath())
             acceptsAll(
-                listOf("threads"),
+                listOf("thr", "threads"),
                 "Parallelism level (default: ${Runtime.getRuntime().availableProcessors()})"
             )
                 .withRequiredArg()
                 .ofType(Int::class.java)
             acceptsAll(
-                listOf("i", "iterations"),
+                listOf("iterations"),
                 "Maximum number of iterations for Expectation Maximisation (EM) algorithm"
             )
                 .withRequiredArg()
                 .ofType(Int::class.java)
                 .defaultsTo(OMNIPEAK_DEFAULT_FIT_MAX_ITERATIONS)
             acceptsAll(
-                listOf("tr", "threshold"),
+                listOf("threshold"),
                 "Convergence threshold for EM algorithm, use --debug option to see detailed info"
             )
                 .withRequiredArg()
                 .ofType(Double::class.java)
                 .defaultsTo(OMNIPEAK_DEFAULT_FIT_THRESHOLD)
             acceptsAll(
-                listOf("kd", "keep-duplicates"),
+                listOf("-kd", "keep-duplicates"),
                 """
                     Keep duplicates.
                     By default, Omnipeak filters out redundant reads aligned at the same genomic position.
@@ -242,7 +244,7 @@ compare                         Differential peak calling
                     """.trimIndent()
             )
             acceptsAll(
-                listOf("kc", "keep-cache"),
+                listOf("keep-cache"),
                 """
                     Keep cache files.
                     By default cache files are created in working directory and removed after computation.

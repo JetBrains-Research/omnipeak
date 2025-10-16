@@ -11,7 +11,7 @@ import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.Coverage
 import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.analyzeAdditiveCandidates
@@ -52,9 +52,7 @@ object SpanResultsAnalysis {
         fdr: Double,
         sensitivityCmdArg: Double?,
         gapCmdArg: Int?,
-        fragmentationLight: Double,
-        fragmentationHard: Double,
-        fragmentationSpeed: Double,
+        fragmentationThreshold: Int,
         blackListPath: Path?,
         peaksList: List<Peak>,
         peaksPath: Path?
@@ -205,7 +203,7 @@ object SpanResultsAnalysis {
         logInfo("Sensitivity2use: $sensitivity2use", infoWriter)
 
         LOG.debug("$name Analysing fragmentation...")
-        val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP) {
+        val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize) {
             estimateCandidatesNumberLens(
                 genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
                 sensitivity2use, it
@@ -214,7 +212,7 @@ object SpanResultsAnalysis {
         val gap2use = if (gapCmdArg != null) {
             gapCmdArg
         } else {
-            estimateGap(candidateGapNs, name, fragmentationLight, fragmentationHard, fragmentationSpeed)
+            estimateGap(candidateGapNs, name, fitInfo.binSize, fragmentationThreshold)
         }
 
         logInfo("Gap2use: $gap2use", infoWriter)

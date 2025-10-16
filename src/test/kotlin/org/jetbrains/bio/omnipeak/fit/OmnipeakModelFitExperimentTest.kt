@@ -7,9 +7,7 @@ import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.AutoFragment
 import org.jetbrains.bio.omnipeak.coverage.CoverageSampler.sampleCoverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_HARD
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_MULTIPLE_TEST_CORRECTION
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_SENSITIVITY
@@ -87,9 +85,7 @@ class OmnipeakModelFitExperimentTest {
                     sensitivityCmdArg = OMNIPEAK_DEFAULT_SENSITIVITY,
                     gapCmdArg = OMNIPEAK_DEFAULT_GAP,
                     summits = false,
-                    fragmentationLight = OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT,
-                    fragmentationHard = OMNIPEAK_DEFAULT_FRAGMENTATION_HARD,
-                    fragmentationSpeed = OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED,
+                    fragmentationThreshold = OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP,
                     clip = OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL,
                     cancellableState = null
                 )

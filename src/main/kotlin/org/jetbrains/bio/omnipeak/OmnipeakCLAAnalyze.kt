@@ -13,9 +13,7 @@ import org.jetbrains.bio.omnipeak.OmnipeakCLA.checkGenomeInFitInformation
 import org.jetbrains.bio.omnipeak.SpanResultsAnalysis.doDeepAnalysis
 import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
 import org.jetbrains.bio.omnipeak.fit.*
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_HARD
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_ESTIMATE_SNR
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_MULTIPLE_TEST_CORRECTION
@@ -50,7 +48,8 @@ object OmnipeakCLAAnalyze {
                 .withValuesSeparatedBy(",")
                 .withValuesConvertedBy(PathConverter.noCheck())
 
-            accepts("bigwig", "Create beta-control corrected counts per million normalized track")
+            acceptsAll(listOf("bw", "bigwig"),
+                "Create beta-control corrected counts per million normalized track")
                 .availableIf("peaks")
 
             accepts(
@@ -83,35 +82,14 @@ object OmnipeakCLAAnalyze {
                 .defaultsTo(OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD)
 
             accepts(
-                "f-light",
-                "Lightest fragmentation threshold to enable gap compensation"
+                "fragmentation",
+                "Fragmentation threshold in bp to enable gap compensation"
             )
                 .availableUnless("gap")
                 .availableUnless("summits")
                 .withRequiredArg()
-                .ofType(Double::class.java)
-                .defaultsTo(OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT)
-
-            accepts(
-                "f-hard",
-                "Hardest fragmentation threshold to stop gap compensation"
-            )
-                .availableUnless("gap")
-                .availableUnless("summits")
-                .withRequiredArg()
-                .ofType(Double::class.java)
-                .defaultsTo(OMNIPEAK_DEFAULT_FRAGMENTATION_HARD)
-
-
-            accepts(
-                "f-speed",
-                "Minimal fragmentation speed threshold for compensation"
-            )
-                .availableUnless("gap")
-                .availableUnless("summits")
-                .withRequiredArg()
-                .ofType(Double::class.java)
-                .defaultsTo(OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED)
+                .ofType(Int::class.java)
+                .defaultsTo(OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP)
 
             parse(params) { options ->
                 if ("quiet" in options) {
@@ -186,23 +164,10 @@ object OmnipeakCLAAnalyze {
                 val clip = options.valueOf("clip") as Double
                 val summits = "summits" in options
                 LOG.info("SUMMITS: $summits")
-                val fragmentationLight = when {
-                    summits || gap != null -> 0.0
-                    options.has("f-light") -> options.valueOf("f-light") as Double
-                    else -> OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT
-                }
-                val fragmentationHard = when {
-                    summits || gap != null -> 0.0
-                    options.has("f-hard") -> options.valueOf("f-hard") as Double
-                    else -> OMNIPEAK_DEFAULT_FRAGMENTATION_HARD
-                }
-
-                val fragmentationSpeed = when {
-                    summits || gap != null -> 0.0
-                    options.has("f-speed") ->
-                        options.valueOf("f-speed") as Double
-
-                    else -> OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED
+                val fragmentation = when {
+                    summits || gap != null -> Int.MAX_VALUE
+                    options.has("fragmentation") -> options.valueOf("fragmentation") as Int
+                    else -> OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
                 }
 
                 if (peaksPath != null) {
@@ -214,9 +179,7 @@ object OmnipeakCLAAnalyze {
                         LOG.info("GAP: $gap")
                     }
                     if (gap == null) {
-                        LOG.info("FRAGMENTATION MIN THRESHOLD: $fragmentationLight")
-                        LOG.info("FRAGMENTATION MAX THRESHOLD: $fragmentationHard")
-                        LOG.info("FRAGMENTATION SPEED THRESHOLD: $fragmentationSpeed")
+                        LOG.info("FRAGMENTATION MIN THRESHOLD: $fragmentation")
                     }
                     LOG.info("CLIP: $clip")
                     LOG.info("PEAKS: $peaksPath")
@@ -275,7 +238,7 @@ object OmnipeakCLAAnalyze {
                         OmnipeakModelToPeaks.getPeaks(
                             results, genomeQuery, fdr, multipleTesting,
                             sensitivity, gap, summits,
-                            fragmentationLight, fragmentationHard, fragmentationSpeed,
+                            fragmentation,
                             clip = clip,
                             blackListPath = blackListPath,
                             name = peaksPath.fileName.stem,
@@ -308,8 +271,7 @@ object OmnipeakCLAAnalyze {
                             genomeQuery,
                             fdr,
                             sensitivity, gap,
-                            fragmentationLight, fragmentationHard,
-                            fragmentationSpeed,
+                            fragmentation,
                             blackListPath,
                             peaksList,
                             peaksPath

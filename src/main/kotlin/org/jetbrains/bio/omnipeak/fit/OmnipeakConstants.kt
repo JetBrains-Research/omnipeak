@@ -94,19 +94,11 @@ object OmnipeakConstants {
 
     // Max gap to compute fragmentation,
     // i.e. reduction of candidate number when merging with gap
-    const val OMNIPEAK_FRAGMENTATION_MAX_GAP = 50  // 5kbp with defaults
-
-    // Gap to check if fragmentation presents
-    const val OMNIPEAK_FRAGMENTATION_CHECKPOINT = 20  // 2kbp with defaults
+    const val OMNIPEAK_FRAGMENTATION_MAX_GAP_BP = 5000
 
     // Rule of thumb: max when narrow marks and ATAC-seq data are not fragmented
-    const val OMNIPEAK_DEFAULT_FRAGMENTATION_LIGHT = 0.7
-
-    // Don't merge after this fragmentation
-    const val OMNIPEAK_DEFAULT_FRAGMENTATION_HARD = 0.5
-
-    // When fragmentation is detected, max speed to estimate compensation gap
-    const val OMNIPEAK_DEFAULT_FRAGMENTATION_SPEED = 0.01
+    // Fragmentation score is an area above the curve of relative candidates number by gap
+    const val OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP = 500
 
     // When calling summits, min summit length
     const val OMNIPEAK_SUMMITS_MIN_LENGTH = 3
