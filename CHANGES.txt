@@ -3,6 +3,15 @@ OmniPeak Changelog
 
 Here you can see the full list of changes between each release.
 
+Version 1.1
+--------------------
+
+Released on October 16th, 2025
+
+- Improved peak calling from bigWig files
+- Simplified the fragmentation compensation gap computation
+- Bug fixes
+
 Version 1.0
 --------------------
 
