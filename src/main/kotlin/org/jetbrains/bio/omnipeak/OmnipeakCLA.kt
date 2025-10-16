@@ -236,7 +236,7 @@ compare                         Differential peak calling
                 .ofType(Double::class.java)
                 .defaultsTo(OMNIPEAK_DEFAULT_FIT_THRESHOLD)
             acceptsAll(
-                listOf("-kd", "keep-duplicates"),
+                listOf("kd", "keep-duplicates"),
                 """
                     Keep duplicates.
                     By default, Omnipeak filters out redundant reads aligned at the same genomic position.
