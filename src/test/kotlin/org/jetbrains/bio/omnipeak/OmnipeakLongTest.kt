@@ -989,7 +989,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                         "-w", dir.toString(),
                         "-m", modelPath.toString(),
                         "-t", path.toString(),
-                        "-kc"
+                        "-keep-cache"
                     )
                 )
                 OmnipeakCLA.main(
