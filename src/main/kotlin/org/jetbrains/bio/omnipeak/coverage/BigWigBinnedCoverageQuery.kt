@@ -67,11 +67,9 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
         return@lazy percentile
     }
 
+    // We don't know the scale of bigWig, so scale to MAX_SIGNAL_IN_BIN anyway
     private val treatmentScale by lazy {
-        return@lazy if (treatmentTopPercentile < binSize * MAX_SIGNAL_IN_BIN)
-            1.0
-        else
-            binSize * MAX_SIGNAL_IN_BIN / treatmentTopPercentile
+        return@lazy binSize * MAX_SIGNAL_IN_BIN / treatmentTopPercentile
     }
 
     private val controlBigWig by lazy { controlPath?.let { BigWigFile.read(it) } }
