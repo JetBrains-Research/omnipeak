@@ -3,6 +3,17 @@ OmniPeak Changelog
 
 Here you can see the full list of changes between each release.
 
+Version 1.2
+--------------------
+
+Released on November 5th, 2025
+
+- Improved summits computation - use Hartigan Dip test to locate single mode peaks and average width
+  followed by Gaussian smoothing for summits detection
+- JBR integration shows the summits of the peak calls
+- Refactorings to improve peak calling code readability and maintainability
+- Bug fixes
+
 Version 1.1
 --------------------
 
