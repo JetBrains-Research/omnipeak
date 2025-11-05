@@ -89,7 +89,7 @@ class OmnipeakModelFitExperimentTest {
                     clip = OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL,
                     cancellableState = null
                 )
-                    .toList()
+                    .peaks
                     .isNotEmpty(),
                 "Expected peak set not to be empty."
             )

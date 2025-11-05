@@ -10,7 +10,7 @@ import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.coverage.FixedFragment
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.checkGenomeInFitInformation
-import org.jetbrains.bio.omnipeak.SpanResultsAnalysis.doDeepAnalysis
+import org.jetbrains.bio.omnipeak.peaks.OmnipeakResultAnalysis.doDeepAnalysis
 import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
 import org.jetbrains.bio.omnipeak.fit.*
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
@@ -291,7 +291,7 @@ object OmnipeakCLAAnalyze {
         peaks: OmnipeakResult,
         blacklistPath: Path?
     ): List<Peak> {
-        var peaksList = peaks.toList()
+        var peaksList = peaks.peaks
         if (blacklistPath != null) {
             LOG.info("Filter out blacklisted regions")
             val blackList = LocationsMergingList.load(genomeQuery, blacklistPath)

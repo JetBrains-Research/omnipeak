@@ -1,7 +1,6 @@
-package org.jetbrains.bio.omnipeak
+package org.jetbrains.bio.omnipeak.peaks
 
 import com.google.common.collect.MinMaxPriorityQueue
-import com.google.common.util.concurrent.AtomicDouble
 import org.apache.commons.math3.stat.StatUtils
 import org.jetbrains.bio.dataframe.BitList
 import org.jetbrains.bio.genome.*
@@ -9,24 +8,24 @@ import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.Coverage
+import org.jetbrains.bio.omnipeak.OmnipeakCLA
 import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.analyzeAdditiveCandidates
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.computeCorrelations
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.detectSensitivityTriangle
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.estimateCandidatesNumberLens
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.estimateGap
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.estimateGenomeSignalNoiseAverage
+import org.jetbrains.bio.omnipeak.peaks.AutoCorrelations.computeAutoCorrelations
+import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.estimateSingleModeLength
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getChromosomeCandidates
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNullPvals
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNulls
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getSensitivitiesAndCandidatesCharacteristics
-import org.jetbrains.bio.omnipeak.peaks.Peak
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.analyzeAdditiveCandidates
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.detectSensitivityTriangle
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberLens
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.getSensitivitiesAndCandidatesCharacteristics
+import org.jetbrains.bio.omnipeak.peaks.Signal.computeSignalToControlAverage
 import org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM
-import org.jetbrains.bio.util.await
 import org.jetbrains.bio.util.deleteIfExists
 import org.jetbrains.bio.util.stem
 import org.jetbrains.bio.util.toPath
@@ -36,11 +35,9 @@ import org.slf4j.LoggerFactory
 import java.io.BufferedWriter
 import java.io.FileWriter
 import java.nio.file.Path
-import java.util.concurrent.Callable
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.*
 
-object SpanResultsAnalysis {
+object OmnipeakResultAnalysis {
 
     val LOG: Logger = LoggerFactory.getLogger(javaClass)
 
@@ -153,8 +150,8 @@ object SpanResultsAnalysis {
         }
 
         LOG.debug("$name Analysing autocorrelation...")
-        val coverageCorrelations = computeCorrelations(coverage)
-        val logNullPValsCorrelations = computeCorrelations(logNullPvals)
+        val coverageCorrelations = computeAutoCorrelations(coverage)
+        val logNullPValsCorrelations = computeAutoCorrelations(logNullPvals)
         val avgAutoCorrelation = logNullPValsCorrelations.average()
         logInfo("Average autocorrelation score: $avgAutoCorrelation", infoWriter)
 
@@ -223,18 +220,27 @@ object SpanResultsAnalysis {
             }
             val logNullMemberships = logNullMembershipsMap[chromosome]
             val bitList2reuse = bitList2reuseMap[chromosome]
-            getChromosomeCandidates(chromosome, logNullMemberships, bitList2reuse, sensitivity2use, null, gap2use)
+            getChromosomeCandidates(chromosome, logNullMemberships, bitList2reuse, sensitivity2use, gap2use)
         }
 
+        val avgModeLen = estimateSingleModeLength(genomeQuery, fitInfo, candidatesMap, true)
+        logInfo("Single model length: $avgModeLen", infoWriter)
+
+        val peakScorer = PeakScorer.create(fitInfo, logNullMembershipsMap)
+
+        // Estimate signal and noise average signal by candidates
         val (avgSignalDensity, avgNoiseDensity) =
-            estimateGenomeSignalNoiseAverage(genomeQuery, fitInfo, candidatesMap, true)
+            peakScorer.analyzeSignalAndNoise(genomeQuery, fitInfo, candidatesMap, true)
         logInfo("Candidates signal density: $avgSignalDensity", infoWriter)
         logInfo("Candidates noise density: $avgNoiseDensity", infoWriter)
-        val signalToNoise = if (avgNoiseDensity != 0.0) avgSignalDensity / avgNoiseDensity else 0.0
+        val signalToNoise = if (avgSignalDensity != null && avgNoiseDensity != null)
+            avgSignalDensity / avgNoiseDensity else 0.0
         logInfo("Coverage signal to noise: $signalToNoise", infoWriter)
 
-        if (fitInfo.isControlAvailable()) {
-            val signalToControl = computeSignalToControlAverage(genomeQuery, fitInfo, candidatesMap, true)
+        if (peakScorer.coverageControlComputable != null) {
+            val signalToControl = computeSignalToControlAverage(
+                genomeQuery, fitInfo, candidatesMap, peakScorer.coverageControlComputable, true
+            )
             logInfo("Coverage signal to control: $signalToControl", infoWriter)
         }
         infoWriter?.close()
@@ -372,7 +378,7 @@ object SpanResultsAnalysis {
         else
             null
         logInfo(
-            "Sensitivity\tCandidatesN\tCandidatesAL\tCandidatesML\tSignalNoiseRatio\tSignalControlRatio",
+            "Sensitivity\tCandidatesN\tCandidatesAL\tCandidatesML",
             sensDetailsWriter, false
         )
         for (s in sensitivities) {
@@ -382,7 +388,7 @@ object SpanResultsAnalysis {
                 }
                 val logNullMemberships = logNullMembershipsMap[chromosome]
                 val bitList2reuse = bitList2reuseMap[chromosome]
-                getChromosomeCandidates(chromosome, logNullMemberships, bitList2reuse, s, null, 0)
+                getChromosomeCandidates(chromosome, logNullMemberships, bitList2reuse, s, 0)
             }
             val candidatesList = genomeQuery.get().flatMap { chromosome ->
                 candidatesMap[chromosome].map {
@@ -393,13 +399,7 @@ object SpanResultsAnalysis {
             val lengths = DoubleArray(total) { candidatesList[it].length().toDouble() }
             val avgL = lengths.average()
             val medianL = StatUtils.percentile(lengths, 50.0)
-            val (avgSignalDensity, avgNoiseDensity) =
-                estimateGenomeSignalNoiseAverage(genomeQuery, omnipeakFitResults.fitInfo, candidatesMap, true)
-            val signalToNoise: Double = if (avgNoiseDensity != 0.0) avgSignalDensity / avgNoiseDensity else 0.0
-            val signalToControl: Double = if (omnipeakFitResults.fitInfo.isControlAvailable()) {
-                computeSignalToControlAverage(genomeQuery, omnipeakFitResults.fitInfo, candidatesMap, true)
-            } else 0.0
-            logInfo("$s\t$total\t$avgL\t$medianL\t$signalToNoise\t$signalToControl", sensDetailsWriter, false)
+            logInfo("$s\t$total\t$avgL\t$medianL", sensDetailsWriter, false)
         }
         sensDetailsWriter?.close()
     }
@@ -605,47 +605,15 @@ object SpanResultsAnalysis {
         }
     }
 
-
-    fun computeSignalToControlAverage(
-        genomeQuery: GenomeQuery,
-        fitInfo: OmnipeakFitInformation,
-        candidates: GenomeMap<List<Range>>,
-        parallel: Boolean
-    ): Double {
-        val coverageComputable = (fitInfo as OmnipeakAnalyzeFitInformation).getTreatmentControlComputable()
-        if (coverageComputable == null) {
-            return 0.0
+    fun DoubleArray.standardDeviation(): Double {
+        var sum = 0.0
+        var sumSq = 0.0
+        for (value in this) {
+            sum += value
+            sumSq += value * value
         }
-        val signalToControls = AtomicDouble()
-        val signalToControlsN = AtomicInteger()
-        genomeQuery.get().map { chromosome ->
-            Callable {
-                if (!fitInfo.containsChromosomeInfo(chromosome) || chromosome !in candidates) {
-                    return@Callable
-                }
-                val offsets = fitInfo.offsets(chromosome)
-                candidates[chromosome].forEach { (from, to) ->
-                    val start = offsets[from]
-                    val end = if (to < offsets.size) offsets[to] else chromosome.length
-                    val chromosomeRange = ChromosomeRange(start, end, chromosome)
-                    val (score, controlScore) = coverageComputable(chromosomeRange)
-                    val ratio = if (controlScore != 0.0) score / controlScore else 0.0
-                    signalToControls.addAndGet(ratio)
-                    signalToControlsN.addAndGet(1)
-                }
-            }
-        }.await(parallel)
-        return if (signalToControls.get() > 0) signalToControls.get() / signalToControls.get() else 0.0
+        return sqrt((sumSq - sum * sum / size) / size)
     }
 
 }
 
-fun DoubleArray.standardDeviation(): Double {
-    var sum = 0.0
-    var sumSq = 0.0
-    for (value in this) {
-        sum += value
-        sumSq += value * value
-    }
-    return sqrt((sumSq - sum * sum / size) / size)
-}

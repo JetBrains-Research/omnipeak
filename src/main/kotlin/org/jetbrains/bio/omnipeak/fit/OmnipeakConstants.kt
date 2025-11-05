@@ -86,8 +86,6 @@ object OmnipeakConstants {
      */
     const val OMNIPEAK_SCORE_BLOCKS = 0.5
 
-    const val OMNIPEAK_SCORE_BLOCKS_GAP = 3
-
     const val OMNIPEAK_DEFAULT_GAP = 0
 
     val OMNIPEAK_DEFAULT_SENSITIVITY = ln(OMNIPEAK_DEFAULT_FDR)
@@ -100,18 +98,18 @@ object OmnipeakConstants {
     // Fragmentation score is an area above the curve of relative candidates number by gap
     const val OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP = 500
 
-    // When calling summits, min summit length
-    const val OMNIPEAK_SUMMITS_MIN_LENGTH = 3
+    // When calling summits, min summit length x average single mode peak length
+    const val OMNIPEAK_SUMMITS_MIN_LENGTH = 0.5
 
-    // When calling summits, minimal relative length between summits to merge
-    const val OMNIPEAK_SUMMITS_MIN_DISTANCE = 2
+    // When calling summits min distance x average single mode peak length
+    const val OMNIPEAK_SUMMITS_MIN_DISTANCE = 0.5
 
     /**
      * Clipping allows to fine-tune boundaries of point-wise peaks according to the local signal.
      */
     const val OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL = 0.4
 
-    const val OMNIPEAK_CLIP_MAX_LENGTH = 0.8
+    const val OMNIPEAK_CLIP_MAX_LENGTH = 0.5
 
     val OMNIPEAK_CLIP_STEPS = doubleArrayOf(0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0, 5.0, 10.0)
 

@@ -49,7 +49,7 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
     fun computeDirectedDifferencePeaks(
         fdr: Double
     ): Pair<List<Peak>, List<Peak>> {
-        val map = OmnipeakModelToPeaks.getPeaks(
+        val peaks = OmnipeakModelToPeaks.getPeaks(
             results,
             genomeQuery,
             fdr, OmnipeakConstants.OMNIPEAK_DEFAULT_MULTIPLE_TEST_CORRECTION,
@@ -59,20 +59,8 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
             OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP,
             OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL,
         ).peaks
-        val highLow = arrayListOf<Peak>()
-        val lowHigh = arrayListOf<Peak>()
-        genomeQuery.get().forEach { chromosome ->
-            val states = getStatesDataFrame(chromosome)
-            map[chromosome].forEach {
-                if (states.getAsFloat(it.startOffset / fitInformation.binSize, ZLHID.D.name) >
-                    states.getAsFloat(it.startOffset / fitInformation.binSize, ZLHID.I.name)
-                ) {
-                    highLow.add(it)
-                } else {
-                    lowHigh.add(it)
-                }
-            }
-        }
+        val highLow = peaks.filter { it.value > 1 }
+        val lowHigh = peaks.filter { it.value < 1 }
         return highLow to lowHigh
     }
 

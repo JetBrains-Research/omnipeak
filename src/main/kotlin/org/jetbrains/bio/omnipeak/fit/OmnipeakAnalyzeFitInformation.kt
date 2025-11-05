@@ -165,8 +165,7 @@ data class OmnipeakAnalyzeFitInformation(
         if (!scoresAvailable()) {
             return null
         }
-        val query = this.binnedCoverageQueries!!.first()
-        when (query) {
+        when (binnedCoverageQueries!!.first()) {
             is NormalizedBinnedCoverageQuery -> {
                 val bncq = this.binnedCoverageQueries!! as List<NormalizedBinnedCoverageQuery>
                 if (!bncq.all { it.areCachesPresent() }) {
@@ -177,7 +176,6 @@ data class OmnipeakAnalyzeFitInformation(
                 // Replacing calls NormalizedCoverageQuery#score and NormalizedCoverageQuery#controlScore
                 val treatmentCoverages = bncq.map { it.ncq.treatmentReads.get() }
                 return { chromosomeRange: ChromosomeRange ->
-                    // val score = fitInfo.score(chromosomeRange)
                     treatmentCoverages.sumOf { it.getBothStrandsCoverage(chromosomeRange) }.toDouble() /
                             treatmentCoverages.size
                 }
@@ -186,13 +184,15 @@ data class OmnipeakAnalyzeFitInformation(
             is BigWigBinnedCoverageQuery -> {
                 val bncq = this.binnedCoverageQueries!! as List<BigWigBinnedCoverageQuery>
                 return { chromosomeRange: ChromosomeRange ->
-                    // val score = fitInfo.score(chromosomeRange)
                     bncq.sumOf { it.score(chromosomeRange) } / bncq.size
                 }
             }
 
             else -> {
-                throw IllegalStateException("Unexpected binned coverage query: ${query::class.java.simpleName}")
+                throw IllegalStateException(
+                    "Unexpected binned coverage query: " +
+                            "${binnedCoverageQueries!!.first()::class.java.simpleName}"
+                )
             }
         }
     }
@@ -201,8 +201,7 @@ data class OmnipeakAnalyzeFitInformation(
         if (!scoresAvailable()) {
             return null
         }
-        val query = this.binnedCoverageQueries!!.first()
-        when (query) {
+        when (val query = this.binnedCoverageQueries!!.first()) {
             is NormalizedBinnedCoverageQuery -> {
                 val bncq = this.binnedCoverageQueries!! as List<NormalizedBinnedCoverageQuery>
                 if (!bncq.all { it.areCachesPresent() }) {
@@ -215,15 +214,14 @@ data class OmnipeakAnalyzeFitInformation(
                 val controlCoverages = bncq.map { it.ncq.controlReads?.get() }
                 val controlScales = bncq.map { it.ncq.coveragesNormalizedInfo.controlScale }
                 return { chromosomeRange: ChromosomeRange ->
-                    // val score = fitInfo.score(chromosomeRange)
                     val score =
-                        treatmentCoverages.sumOf { it.getBothStrandsCoverage(chromosomeRange) }.toDouble() /
-                                treatmentCoverages.size
-                    // val controlScore = fitInfo.controlScore(chromosomeRange)
+                        treatmentCoverages.sumOf {
+                            it.getBothStrandsCoverage(chromosomeRange)
+                        }.toDouble() / treatmentCoverages.size
                     val controlScore =
-                        controlCoverages.zip(controlScales)
-                            .sumOf { (c, s) -> if (c != null) c.getBothStrandsCoverage(chromosomeRange) * s else 0.0 } /
-                                controlCoverages.size
+                        controlCoverages.zip(controlScales).sumOf { (c, s) ->
+                            if (c != null) c.getBothStrandsCoverage(chromosomeRange) * s else 0.0
+                        } / controlCoverages.size
                     score to controlScore
                 }
             }
@@ -231,11 +229,10 @@ data class OmnipeakAnalyzeFitInformation(
             is BigWigBinnedCoverageQuery -> {
                 val bncq = this.binnedCoverageQueries!! as List<BigWigBinnedCoverageQuery>
                 return { chromosomeRange: ChromosomeRange ->
-                    // val score = fitInfo.score(chromosomeRange)
                     val score = bncq.sumOf { it.score(chromosomeRange) } / bncq.size
-                    // val controlScore = fitInfo.controlScore(chromosomeRange)
-                    val controlScore =
-                        bncq.sumOf { if (it.controlAvailable()) it.controlScore(chromosomeRange) else 0.0 } / bncq.size
+                    val controlScore = bncq.sumOf {
+                        if (it.controlAvailable()) it.controlScore(chromosomeRange) else 0.0
+                    } / bncq.size
                     score to controlScore
                 }
             }

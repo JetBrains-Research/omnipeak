@@ -81,7 +81,7 @@ class OmnipeakLongTest {
             OmnipeakCLA.main(arrayOf("--version"))
         }
         val version = out.trim()
-        if (version == "@VERSION@.@build@ built on @DATE@") {
+        if (version == "@VERSION@.@BUILD@ built on @DATE@") {
             return
         }
         // the test is sometimes launched in the assembled JAR, where the @@ tokens have already been substituted

@@ -1,8 +1,7 @@
 package org.jetbrains.bio.omnipeak.peaks
 
 import org.apache.commons.csv.CSVFormat
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.SensitivityInfo
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.detectSensitivityTriangle
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.detectSensitivityTriangle
 import org.jetbrains.bio.util.bufferedReader
 import org.jetbrains.bio.util.withResource
 import org.junit.Test
@@ -13,11 +12,11 @@ import kotlin.test.assertEquals
 
 
 @RunWith(Parameterized::class)
-class SensitivityPepTest(private val name: String, private val triangle: SensitivityInfo) {
+class SensitivityGapTest(private val name: String, private val triangle: SensitivityGap.PepInfo) {
     @Test
     fun testDetectTriangle() {
         withResource(
-            SensitivityPepTest::class.java,
+            SensitivityGapTest::class.java,
             name
         ) { tablePath ->
             val sensitivities = arrayListOf<Double>()
@@ -42,8 +41,12 @@ class SensitivityPepTest(private val name: String, private val triangle: Sensiti
         @JvmStatic
         @Parameters
         fun `data`(): Collection<Array<out Any>>  = listOf(
-            arrayOf("cd14_chr15_peps.tsv", SensitivityInfo(beforeMerge = 13, stable = 29, beforeNoise = 48)),
-            arrayOf("chips_H3K27ac_1_1.0.tsv", SensitivityInfo(beforeMerge=1, stable=27, beforeNoise=49)),
+            arrayOf("cd14_chr15_peps.tsv",
+                SensitivityGap.PepInfo(beforeMerge = 13, stable = 29, beforeNoise = 48)
+            ),
+            arrayOf("chips_H3K27ac_1_1.0.tsv",
+                SensitivityGap.PepInfo(beforeMerge = 1, stable = 27, beforeNoise = 49)
+            ),
 
         )
     }
