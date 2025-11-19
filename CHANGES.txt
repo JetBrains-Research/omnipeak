@@ -9,6 +9,7 @@ Version 1.3
 Released on November 19th, 2025
 
 - Added `--no-control-regression` command line option to disable control regression from the signal data
+- Bug fixes
 
 Version 1.2
 --------------------

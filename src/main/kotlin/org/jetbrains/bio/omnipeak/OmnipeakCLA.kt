@@ -6,7 +6,6 @@ import org.jetbrains.bio.experiment.Configuration
 import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.coverage.AutoFragment
 import org.jetbrains.bio.genome.coverage.Fragment
-import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FDR
@@ -324,10 +323,9 @@ compare                         Differential peak calling
     internal fun getRegressControl(
         options: OptionSet, fitInformation: OmnipeakFitInformation? = null, log: Boolean = false
     ) = !getProperty(
-        "no-control-regression" !in options, fitInformation?.regressControl?.not(), false,
-        "'no-control-regression' flag", "REGRESS CONTROL", log
+        "no-control-regression" in options, fitInformation?.regressControl?.not(), false,
+        "'no-control-regression' flag", "NO CONTROL REGRESSION", log
     )
-
 
     /**
      * Checks if the genome build stored in the fitInformation matches the build inferred from the chrom.sizes file.

@@ -167,7 +167,7 @@ object  OmnipeakCLACompare {
                         name = peaksPath.fileName.stem
                     )
                     LOG.info("${peaksPath.fileName.stem} format chromosome, start, end, name, score, strand, foldchange, -log(p), -log(q)")
-                    Peak.savePeaks(peaks.peaks, peaksPath, "diff_${id}.peak")
+                    Peak.savePeaks(peaks.peaks, peaksPath, "diff_${peaksPath.fileName.stem}")
                     LOG.info("Saved result to $peaksPath")
                 }
                 if (!keepCacheFiles) {

@@ -62,8 +62,6 @@ abstract class OmnipeakModelFitExperiment<
 
     val results: OmnipeakFitResults by lazy { getOrLoadResults() }
 
-    fun getStatesDataFrame(chromosome: Chromosome): DataFrame = sliceStatesDataFrame(statesDataFrame, chromosome)
-
     override fun doCalculations() {
         results.logNullMemberships
     }

@@ -7,7 +7,6 @@ import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.PeaksInfo
 import org.jetbrains.bio.genome.containers.LocationsMergingList
-import org.jetbrains.bio.genome.coverage.FixedFragment
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.checkGenomeInFitInformation
 import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
@@ -240,11 +239,7 @@ object OmnipeakCLAAnalyze {
                     val peaksList = processBlackList(genomeQuery, peaks, blackListPath)
 
                     LOG.info("${peaksPath.fileName.stem} format chromosome, start, end, name, score, strand, signal, -log(p), -log(q)")
-                    Peak.savePeaks(
-                        peaksList, peaksPath,
-                        "peak${if (fragment is FixedFragment) "_$fragment" else ""}_" +
-                                "${bin}_${fdr}_${peaks.sensitivity}_${peaks.gap}"
-                    )
+                    Peak.savePeaks(peaksList, peaksPath, "peak_${peaksPath.fileName.stem}")
                     LOG.info("Peaks saved to $peaksPath")
                     val aboutPeaks = PeaksInfo.compute(
                         genomeQuery,

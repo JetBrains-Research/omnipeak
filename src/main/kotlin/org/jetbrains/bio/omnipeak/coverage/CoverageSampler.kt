@@ -55,7 +55,7 @@ object CoverageSampler {
                         throw IllegalStateException("Couldn't sample coverage.")
                     }
 
-                    val totalSampledCoverage: Long = sampledCoverage.fold(0L) { acc: Long, v: Int -> acc + v }
+                    val totalSampledCoverage: Long = sampledCoverage.sumOf { it.toLong() }
                     val scale = if (totalCoverage != null)
                         (chr.length.toFloat() / genomeLength) * (totalCoverage.toFloat() / totalSampledCoverage)
                     else
@@ -75,6 +75,40 @@ object CoverageSampler {
                             val start = b * bin + i
                             printer.print(BedEntry(chr.name, start, start + 1))
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    fun sampleControlCoverage(
+        path: Path,
+        genomeQuery: GenomeQuery,
+        bin: Int,
+        totalCoverage: Long? = null,
+    ) {
+        val random = Random()
+        val chromosomes = genomeQuery.get()
+        BedFormat().print(path).use { printer ->
+            val genomeLength = chromosomes.sumOf { it.length.toLong() }
+            chromosomes.forEach { chr ->
+                val bins = chr.length / bin
+                val sampledCoverage = IntArray(bins) { random.nextInt(0, bin) }
+
+                val totalSampledCoverage: Long = sampledCoverage.sumOf { it.toLong() }
+                val scale = if (totalCoverage != null)
+                    (chr.length.toFloat() / genomeLength) * (totalCoverage.toFloat() / totalSampledCoverage)
+                else
+                    null
+                for (b in 0 until bins) {
+                    val readsInBin = when {
+                        scale != null -> (scale * sampledCoverage[b]).toInt()
+                        else -> sampledCoverage[b]
+                    }
+                    // Keep reads sorted
+                    (0 until readsInBin).map { it % bin }.sorted().forEach { i ->
+                        val start = b * bin + i
+                        printer.print(BedEntry(chr.name, start, start + 1))
                     }
                 }
             }

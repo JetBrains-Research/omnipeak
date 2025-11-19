@@ -13,6 +13,7 @@ import org.jetbrains.bio.genome.format.BedFormat
 import org.jetbrains.bio.genome.query.ReadsQuery
 import org.jetbrains.bio.genome.toQuery
 import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
+import org.jetbrains.bio.omnipeak.coverage.CoverageSampler.sampleControlCoverage
 import org.jetbrains.bio.omnipeak.coverage.CoverageSampler.sampleCoverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
@@ -20,6 +21,7 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FDR
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FIT_MAX_ITERATIONS
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FIT_THRESHOLD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakDataPaths
+import org.jetbrains.bio.omnipeak.fit.OmnipeakModelFitExperiment
 import org.jetbrains.bio.statistics.distribution.Sampling
 import org.jetbrains.bio.util.*
 import org.junit.After
@@ -721,14 +723,160 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                 assertIn("Signal mean:", log)
                 assertIn("Noise mean:", log)
                 assertIn("Signal to noise:", log)
-                /** In sampling producer model - signal-to-noise ratio ~ 30
-                 * "mean": 0.36580807929296383, // noise
-                 * "mean": 9.113896687733767,   // signal
-                 */
                 assertTrue(log.substringAfter("Signal to noise:").substringBefore("\n").trim().toDouble() > 5)
             }
         }
     }
+
+    @Test
+    fun testAnalyzeEnrichmentWithControl() {
+        // NOTE[oshpynov] we use .bed.gz here for the ease of sampling result save
+        withTempDirectory("track") { dir ->
+            val path = dir / "track.bed.gz"
+            val enrichedRegions = genomeMap(TO) {
+                val enriched = BitSet()
+                if (it.name == "chr1") {
+                    enriched.set(1000, 2000)
+                }
+                enriched
+            }
+
+            val zeroRegions = genomeMap(TO) {
+                val zeroes = BitSet()
+                if (it.name == "chr1") {
+                    zeroes[3000] = 4000
+                }
+                zeroes
+            }
+
+            sampleCoverage(
+                path, TO, OMNIPEAK_DEFAULT_BIN, enrichedRegions, zeroRegions,
+                goodQuality = true,
+                totalCoverage = (TO.get().first().length * 0.01).toLong()
+            )
+            println("Saved sampled track file: $path")
+            val control = dir / "control.bed.gz"
+            sampleCoverage(
+                control, TO, OMNIPEAK_DEFAULT_BIN, enrichedRegions, zeroRegions,
+                goodQuality = false,
+                totalCoverage = (TO.get().first().length * 0.1).toLong()
+            )
+            println("Saved sampled control track file: $control")
+
+            withTempDirectory("work") {
+                val chromsizes = Genome["to1"].chromSizesPath.toString()
+                val modelPath = it / "model.omni"
+                val peaksPath = it / "${path.stem}.peak"
+                val (out, _) = Logs.captureLoggingOutput {
+                    OmnipeakCLA.main(
+                        arrayOf(
+                            "analyze", "-cs", chromsizes,
+                            "--workdir", it.toString(),
+                            "-t", path.toString(),
+                            "-c", control.toString(),
+                            "--threads", THREADS.toString(),
+                            "--model", modelPath.toString(),
+                            "--peaks", peaksPath.toString(),
+                        )
+                    )
+                    // Check created bed file
+                    assertTrue(
+                        Location(
+                            1100 * OMNIPEAK_DEFAULT_BIN,
+                            1900 * OMNIPEAK_DEFAULT_BIN,
+                            TO.get().first()
+                        )
+                                in LocationsMergingList.load(TO, peaksPath),
+                        "Expected location not found in called peaks"
+                    )
+
+                    val fitResults = OmnipeakModelFitExperiment.loadResults(Genome["to1"].toQuery(), modelPath)
+                    assertTrue(fitResults.fitInfo.regressControl)
+
+                    val data = fitResults.fitInfo.dataQuery.apply(TO.get().first())
+                    val scores = data.sliceAsInt(data.labels.first())
+                    assertTrue((1100 until 1900).map { scores[it] }.all { it < 100 })
+                }
+
+                assertIn("CONTROL: $control", out)
+                assertIn("NO CONTROL REGRESSION: false", out)
+            }
+        }
+    }
+
+    @Test
+    fun testAnalyzeEnrichmentWithControlNoControlRegression() {
+        // NOTE[oshpynov] we use .bed.gz here for the ease of sampling result save
+        withTempDirectory("track") { dir ->
+            val path = dir / "track.bed.gz"
+            val enrichedRegions = genomeMap(TO) {
+                val enriched = BitSet()
+                if (it.name == "chr1") {
+                    enriched.set(1000, 2000)
+                }
+                enriched
+            }
+
+            val zeroRegions = genomeMap(TO) {
+                val zeroes = BitSet()
+                if (it.name == "chr1") {
+                    zeroes[3000] = 4000
+                }
+                zeroes
+            }
+
+            sampleCoverage(
+                path, TO, OMNIPEAK_DEFAULT_BIN, enrichedRegions, zeroRegions,
+                goodQuality = true, totalCoverage = (TO.get().first().length * 0.01).toLong()
+            )
+            println("Saved sampled track file: $path")
+            val control = dir / "control.bed.gz"
+            sampleCoverage(
+                control, TO, OMNIPEAK_DEFAULT_BIN, enrichedRegions, zeroRegions,
+                goodQuality = false,
+                totalCoverage = (TO.get().first().length * 0.1).toLong()
+            )
+            println("Saved sampled control track file: $control")
+
+            val chromsizes = Genome["to1"].chromSizesPath.toString()
+            val peaksPath = dir / "result.peak"
+            val modelPath = dir / "model.omni"
+            val (out, _) = Logs.captureLoggingOutput {
+                OmnipeakCLA.main(
+                    arrayOf(
+                        "analyze", "-cs", chromsizes,
+                        "--workdir", dir.toString(),
+                        "-t", path.toString(),
+                        "-c", control.toString(),
+                        "--threads", THREADS.toString(),
+                        "--model", modelPath.toString(),
+                        "--peaks", peaksPath.toString(),
+                        "--no-control-regression",
+                    )
+                )
+            }
+            // Check created bed file
+            assertTrue(
+                Location(
+                    1100 * OMNIPEAK_DEFAULT_BIN,
+                    1900 * OMNIPEAK_DEFAULT_BIN,
+                    TO.get().first()
+                )
+                        in LocationsMergingList.load(TO, peaksPath),
+                "Expected location not found in called peaks"
+            )
+
+            val fitResults = OmnipeakModelFitExperiment.loadResults(Genome["to1"].toQuery(), modelPath)
+            assertFalse(fitResults.fitInfo.regressControl)
+
+            val data = fitResults.fitInfo.dataQuery.apply(TO.get().first())
+            val scores = data.sliceAsInt(data.labels.first())
+            assertTrue((1100 until 1900).map { scores[it] }.all { it == 100 })
+
+            assertIn("NO CONTROL REGRESSION: true", out)
+        }
+    }
+
 
     @Test
     fun analyzeSampledBigWigEnrichment() {
