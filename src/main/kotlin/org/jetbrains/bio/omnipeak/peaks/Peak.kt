@@ -38,7 +38,7 @@ data class Peak(
     companion object {
         internal val LOG = LoggerFactory.getLogger(Peak::class.java)
 
-        fun savePeaks(peaks: List<Peak>, path: Path, peakName: String = "") {
+        fun savePeaks(peaks: List<Peak>, path: Path, peakName: String = "peak") {
             CSVFormat.TDF.print(path.bufferedWriter()).use { printer ->
                 peaks.sorted().forEachIndexed { i, peak ->
                     /* See ENCODE broadPeak (BED 6+3) format for details */
@@ -46,7 +46,7 @@ data class Peak(
                         peak.chromosome.name,
                         peak.range.startOffset.toString(),
                         peak.range.endOffset.toString(),
-                        "${peakName.ifEmpty { "peak" }}_${i + 1}",
+                        "${peakName}_${i + 1}",
                         peak.score.toString(),
                         ".",
                         peak.value.toString(),

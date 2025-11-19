@@ -9,6 +9,7 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.peaks.Signal.estimateGenomeSignalNoiseAverage
 import org.jetbrains.bio.omnipeak.statistics.util.PoissonUtil
 import org.jetbrains.bio.viktor.F64Array
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.sqrt
 
@@ -25,22 +26,20 @@ class PeakScorer(
             coverageControlComputable != null -> {
                 val (score, controlScore) = coverageControlComputable(cr)
                 // Combine both model and signal estimations
-                return -sqrt(
-                    modelLogPs * PoissonUtil.logPoissonCdf(
-                        ceil(score).toInt() + 1, controlScore + 1
-                    )
+                val logPoissonCdf = PoissonUtil.logPoissonCdf(
+                    ceil(score).toInt() + 1, controlScore + 1
                 )
+                return -sqrt(abs(modelLogPs * logPoissonCdf))
             }
 
             avgNoiseDensity != null -> {
                 checkNotNull(coverageComputable)
                 val score = coverageComputable(cr)
                 // Combine both model and signal estimations
-                return -sqrt(
-                    modelLogPs * PoissonUtil.logPoissonCdf(
-                        ceil(score).toInt() + 1, avgNoiseDensity!! * (cr.endOffset - cr.startOffset) + 1
-                    )
+                val logPoissonCdf = PoissonUtil.logPoissonCdf(
+                    ceil(score).toInt() + 1, avgNoiseDensity!! * (cr.endOffset - cr.startOffset) + 1
                 )
+                return -sqrt(abs(modelLogPs * logPoissonCdf))
             }
 
             else ->

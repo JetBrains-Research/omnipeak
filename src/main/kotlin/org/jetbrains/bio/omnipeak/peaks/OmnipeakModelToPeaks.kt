@@ -29,7 +29,9 @@ import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import java.util.concurrent.Callable
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.*
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
 
 
 object OmnipeakModelToPeaks {
@@ -431,10 +433,11 @@ object OmnipeakModelToPeaks {
                 start = clippedStart
                 end = clippedEnd
             }
-            val blocks =
-                if (summits) listOf(Range(start, end))
+            var blocks =
+                if (summits)
+                    listOf(Range(start, end))
                 else
-                // Compute significant blocks within candidate
+                    // Compute significant blocks within candidate
                     candidateScoreBlocks(logNullMemberships, from, to).mapNotNull { (blockFrom, blockTo) ->
                         val blockStart = max(offsets[blockFrom], start)
                         val blockEnd = min(if (blockTo < offsets.size) offsets[blockTo] else chromosome.length, end)
@@ -443,6 +446,9 @@ object OmnipeakModelToPeaks {
                         } else
                             null
                     }
+            if (blocks.isEmpty()) {
+                blocks = listOf(Range(start, end))
+            }
             return@mapNotNull CandidateCoordinates(start, end, blocks)
         }
     }
@@ -467,7 +473,9 @@ object OmnipeakModelToPeaks {
             cancellableState?.checkCanceled()
             val blocks = candidateCoordinates[idx].blocks
             val blocksLogPs = blocks.map { (blockStart, blockEnd) ->
-                return@map peakScorer.logPValue(ChromosomeRange(blockStart, blockEnd, chromosome))
+                val logPValue = peakScorer.logPValue(ChromosomeRange(blockStart, blockEnd, chromosome))
+                check(!logPValue.isNaN()) { "P-value is nan" }
+                return@map logPValue
             }
             return@F64Array lengthWeightedScores(blocks, blocksLogPs)
         }
@@ -541,17 +549,26 @@ object OmnipeakModelToPeaks {
         scores: List<Double>,
     ): Double {
         require(blocks.size == scores.size) { "Different lengths of blocks and scores lists" }
+        if (blocks.isEmpty()) {
+            println()
+        }
+        require(blocks.isNotEmpty()) { "Empty blocks list" }
         if (blocks.size == 1) {
             return scores.first()
         }
         val sum = KahanSum()
-        var l = 0
+        var l = 0L
         blocks.zip(scores).sortedBy { it.second }
             .forEach { (b, p) ->
-                sum += p * (b.startOffset - b.endOffset)
-                l += b.startOffset - b.endOffset
+                val blockLen = b.endOffset - b.startOffset
+                check(blockLen > 0) { "Not positive block length" }
+                sum += p * blockLen
+                l += blockLen
             }
-        return sum.result() / l
+        val value = sum.result() / l
+        check(l > 0) { "Empty summary length" }
+        check(!value.isNaN()) { "Length weighted mean is nan" }
+        return value
     }
 
     val LOG_10 = ln(10.0)
