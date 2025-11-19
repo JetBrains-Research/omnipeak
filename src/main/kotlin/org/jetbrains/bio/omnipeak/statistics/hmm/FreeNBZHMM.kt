@@ -73,7 +73,7 @@ open class FreeNBZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray,
         @Suppress("MayBeConstant", "unused")
         @Transient
         @JvmField
-        val VERSION: Int = 1
+        val VERSION: Int = 2
 
         private val LOG = LoggerFactory.getLogger(FreeNBZHMM::class.java)
 

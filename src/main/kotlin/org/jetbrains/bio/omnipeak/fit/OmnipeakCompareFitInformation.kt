@@ -18,15 +18,16 @@ data class OmnipeakCompareFitInformation(
     val data2: List<OmnipeakDataPaths>,
     val labels1: List<String>,
     val labels2: List<String>,
-    val explicitFormat: InputFormat?,
-    val fragment: Fragment,
-    val unique: Boolean,
+    override val explicitFormat: InputFormat?,
+    override val fragment: Fragment,
+    override val unique: Boolean,
     override val binSize: Int,
+    override val regressControl: Boolean,
     override val chromosomesSizes: LinkedHashMap<String, Int>
 ) : OmnipeakFitInformation {
 
     override val id
-        get() = OmnipeakAnalyzeFitInformation.generateId(data1 + data2, fragment, binSize, unique)
+        get() = OmnipeakAnalyzeFitInformation.generateId(data1 + data2, fragment, binSize, unique, regressControl)
 
     override val dataQuery: Query<Chromosome, DataFrame>
         get() {
@@ -63,6 +64,7 @@ data class OmnipeakCompareFitInformation(
                     fragment,
                     unique,
                     binSize,
+                    regressControl,
                     forceCaching = true,
                     showLibraryInfo = false
                 )
@@ -78,6 +80,7 @@ data class OmnipeakCompareFitInformation(
                     fragment,
                     unique,
                     binSize,
+                    regressControl,
                     forceCaching = true,
                     showLibraryInfo = false
                 )
@@ -177,13 +180,15 @@ data class OmnipeakCompareFitInformation(
             explicitFormat: InputFormat?,
             fragment: Fragment,
             unique: Boolean,
-            binSize: Int
+            binSize: Int,
+            regressControl: Boolean
         ): OmnipeakCompareFitInformation {
             return OmnipeakCompareFitInformation(
-                genomeQuery.build, paths1, paths2, labels1, labels2, explicitFormat, fragment, unique, binSize,
+                genomeQuery.build, paths1, paths2, labels1, labels2,
+                explicitFormat, fragment, unique, binSize, regressControl,
                 OmnipeakFitInformation.chromSizes(
                     OmnipeakModelFitExperiment.filterGenomeQueryWithData(
-                        genomeQuery, paths1 + paths2, explicitFormat, fragment, unique
+                        genomeQuery, paths1 + paths2, explicitFormat, fragment, unique, regressControl
                     )
                 )
             )

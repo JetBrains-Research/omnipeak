@@ -34,11 +34,11 @@ class OmnipeakModelFitExperimentTest {
             sampleCoverage(path, GenomeQuery(Genome["to1"]), 200, goodQuality = true)
             println("Saved sampled track file: $path")
             val dataQuery = OmnipeakAnalyzeFitInformation.createFitInformation(
-                GenomeQuery(Genome["to1"]), listOf(OmnipeakDataPaths(path, null)), null,
-                listOf("foo"), AutoFragment, true, 200
+                GenomeQuery(Genome["to1"]), listOf(OmnipeakDataPaths(path, null)), listOf("foo"),
+                null, AutoFragment, true, 200, true
             ).dataQuery
 
-            assertTrue(dataQuery.id.startsWith("${path.stemGz}_binned_foo_200"))
+            assertEquals("${path.stemGz}_200_binned_foo", dataQuery.id)
             val df = dataQuery.apply(Chromosome(Genome["to1"], "chr1"))
             assertEquals("[foo]", df.labels.toList().toString())
         }
@@ -55,7 +55,8 @@ class OmnipeakModelFitExperimentTest {
             println("Saved sampled track file: $path")
             val (out, _) = Logs.captureLoggingOutput(Level.DEBUG) {
                 val effectiveGenomeQuery = OmnipeakModelFitExperiment.filterGenomeQueryWithData(
-                    GenomeQuery(Genome["to1"]), listOf(OmnipeakDataPaths(path, null)), null, AutoFragment, true
+                    GenomeQuery(Genome["to1"]), listOf(OmnipeakDataPaths(path, null)),
+                    null, AutoFragment, true, true
                 )
                 assertEquals("[chr1]", effectiveGenomeQuery.get().map { it.name }.toString())
             }
@@ -75,7 +76,7 @@ class OmnipeakModelFitExperimentTest {
             )
             println("Saved sampled track file: $path")
             val peakCallingExperiment = OmnipeakPeakCallingExperiment.getExperiment(
-                fullGenomeQuery, listOf(OmnipeakDataPaths(path, null)), null, AutoFragment, true, 200
+                fullGenomeQuery, listOf(OmnipeakDataPaths(path, null)), null, AutoFragment, true, 200, true
             )
             assertTrue(
                 OmnipeakModelToPeaks.getPeaks(

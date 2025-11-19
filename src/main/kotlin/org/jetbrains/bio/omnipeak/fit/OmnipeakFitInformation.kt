@@ -10,6 +10,7 @@ import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.Fragment
 import org.jetbrains.bio.genome.query.Query
+import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation.Companion.chromSizes
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation.Companion.load
@@ -48,8 +49,20 @@ interface OmnipeakFitInformation {
     /** Genome build. */
     val build: String
 
+    /** Input format. */
+    val explicitFormat: InputFormat?
+
+    /** Fragment size */
+    val fragment: Fragment
+
+    /** Keep unique reads only. */
+    val unique: Boolean
+
     /** Bin size in base pairs. */
     val binSize: Int
+
+    /** Whether to regress out control signal from the data. */
+    val regressControl: Boolean
 
     /** A map of chromosome name -> chromosome length entries. */
     val chromosomesSizes: LinkedHashMap<String, Int>

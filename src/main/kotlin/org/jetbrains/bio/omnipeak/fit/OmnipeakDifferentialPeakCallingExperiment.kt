@@ -37,7 +37,7 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
     maxIterations: Int
 ) : OmnipeakModelFitExperiment<ConstrainedNBZHMM, OmnipeakCompareFitInformation, ZLHID>(
     fitInformation,
-    ConstrainedNBZHMM.fitter(fitInformation.data1.size, fitInformation.data2.size), ConstrainedNBZHMM::class.java,
+    ConstrainedNBZHMM.fitter(fitInformation.data1.size, fitInformation.data2.size),
     ZLHID.entries.toTypedArray(), NullHypothesis.of(ZLHID.same()),
     threshold, maxIterations,
     null, false, false
@@ -85,6 +85,7 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
             bin: Int,
             fragment: Fragment,
             unique: Boolean,
+            regressControl: Boolean,
             threshold: Double,
             maxIterations: Int
         ): OmnipeakDifferentialPeakCallingExperiment {
@@ -94,7 +95,7 @@ class OmnipeakDifferentialPeakCallingExperiment private constructor(
                 paths1, paths2,
                 MultiLabels.generate(OMNIPEAK_TRACK1_PREFIX, paths1.size).toList(),
                 MultiLabels.generate(OMNIPEAK_TRACK2_PREFIX, paths2.size).toList(),
-                explicitFormat, fragment, unique, bin
+                explicitFormat, fragment, unique, bin, regressControl
             )
             return OmnipeakDifferentialPeakCallingExperiment(fitInformation, threshold, maxIterations)
         }

@@ -6,7 +6,6 @@ import org.jetbrains.bio.big.BigWigFile
 import org.jetbrains.bio.genome.Chromosome
 import org.jetbrains.bio.genome.ChromosomeRange
 import org.jetbrains.bio.genome.GenomeQuery
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
 import org.jetbrains.bio.util.name
 import org.jetbrains.bio.util.reduceIds
 import org.jetbrains.bio.util.stemGz
@@ -18,24 +17,22 @@ import kotlin.math.min
 /**
  * A BinnedQuery implementation that reads coverage data from BigWig files.
  */
-class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
-
-    private val genomeQuery: GenomeQuery
-    private val treatmentPath: Path
-    private val controlPath: Path?
-    private val binSize: Int
+class BigWigBinnedCoverageQuery(
+    private val genomeQuery: GenomeQuery,
+    private val treatmentPath: Path,
+    private val controlPath: Path?,
+    private val binSize: Int,
+    private val regressControl: Boolean
+) : BinnedCoverageQuery {
 
     constructor(
         genomeQuery: GenomeQuery,
         treatmentPath: Path,
         controlPath: Path?,
-        binSize: Int = OMNIPEAK_DEFAULT_BIN,
+        binSize: Int,
+        regressControl: Boolean,
         showLibraryInfo: Boolean = true
-    ) {
-        this.genomeQuery = genomeQuery
-        this.treatmentPath = treatmentPath
-        this.controlPath = controlPath
-        this.binSize = binSize
+    ) : this(genomeQuery, treatmentPath, controlPath, binSize, regressControl) {
         if (showLibraryInfo) {
             showLibraryInfo()
         }
@@ -123,7 +120,7 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
     }
 
     override fun controlNormalizedScore(chromosomeRange: ChromosomeRange): Int {
-        if (!controlAvailable()) {
+        if (!regressControl || !controlAvailable()) {
             return score(chromosomeRange).toInt()
         }
         // Scale control to treatment
@@ -165,7 +162,7 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
         checkNonNegative(treatmentCoverage, "Treatment")
 
         // Convert summaries to IntArray
-        if (!controlAvailable()) {
+        if (!regressControl || !controlAvailable()) {
             return IntArray(binsCount) { i ->
                 if (i < treatmentCoverage.size) {
                     treatmentScore(treatmentCoverage[i].value()).toInt()
@@ -175,7 +172,7 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
             }
         }
         // Scale control to treatment
-        val controlScale = treatmentTotalCoverage * treatmentScale/ controlTotalCoverage
+        val controlScale = treatmentTotalCoverage * treatmentScale / controlTotalCoverage
         val controlCoverage = controlBigWig!!.summarize(
             matchedBfChr, 0, chrLength, binsCount
         )
@@ -183,8 +180,10 @@ class BigWigBinnedCoverageQuery : BinnedCoverageQuery {
 
         return IntArray(binsCount) { i ->
             if (i < treatmentCoverage.size) {
-                max(0.0, treatmentScore(treatmentCoverage[i].value()) -
-                        controlCoverage[i].value() * controlScale).toInt()
+                max(
+                    0.0, treatmentScore(treatmentCoverage[i].value()) -
+                            controlCoverage[i].value() * controlScale
+                ).toInt()
             } else {
                 0
             }

@@ -55,6 +55,11 @@ object  OmnipeakCLACompare {
                 .withValuesSeparatedBy(",")
                 .withValuesConvertedBy(PathConverter.exists())
 
+            acceptsAll(
+                listOf("no-control-regression"),
+                "Disable control regression from the treatment data"
+            )
+
             parse(params) { options ->
                 if ("quiet" in options) {
                     Logs.quiet()
@@ -78,6 +83,7 @@ object  OmnipeakCLACompare {
                     OmnipeakCLA.getFragment(options),
                     OmnipeakCLA.getBin(options),
                     OmnipeakCLA.getUnique(options),
+                    OmnipeakCLA.getRegressControl(options)
                 )
 
                 val fdr = options.valueOf("fdr") as Double
@@ -218,17 +224,18 @@ object  OmnipeakCLACompare {
         LOG.info("WORKING DIR: $workingDir")
         val chromSizesPath = options.valueOf("chrom.sizes") as Path?
         val genomeQuery = GenomeQuery(Genome[chromSizesPath!!])
-        val (data1, data2) = getComparePaths(options, log = true)
+        val (dataPath1, dataPath2) = getComparePaths(options, log = true)
         LOG.info("CHROM.SIZES: $chromSizesPath")
         val explicitFormat: InputFormat? = OmnipeakCLA.readsFormat(options, log=true)
         val fragment = OmnipeakCLA.getFragment(options, log = true)
         val unique = OmnipeakCLA.getUnique(options, log = true)
         val bin = OmnipeakCLA.getBin(options, log = true)
+        val regressControl = OmnipeakCLA.getRegressControl(options, log = true)
         val fitThreshold = OmnipeakCLA.getFitThreshold(options, log = true)
         val fitMaxIterations = OmnipeakCLA.getFitMaxIteration(options, log = true)
         return lazy {
             val experiment = OmnipeakDifferentialPeakCallingExperiment.getExperiment(
-                genomeQuery, data1, data2, explicitFormat, bin, fragment, unique,
+                genomeQuery, dataPath1, dataPath2, explicitFormat, bin, fragment, unique, regressControl,
                 fitThreshold, fitMaxIterations
             )
             experiment.results

@@ -25,31 +25,33 @@ import org.jetbrains.bio.util.stemGz
  */
 data class OmnipeakAnalyzeFitInformation(
     override val build: String,
-    override val paths: List<OmnipeakDataPaths>,
-    override val explicitFormat: InputFormat?,
+    val paths: List<OmnipeakDataPaths>,
     val labels: List<String>,
+    override val explicitFormat: InputFormat?,
     override val fragment: Fragment,
     override val unique: Boolean,
     override val binSize: Int,
+    override val regressControl: Boolean,
     override val chromosomesSizes: LinkedHashMap<String, Int>
-) : AbstractOmnipeakAnalyzeFitInformation {
+) : OmnipeakFitInformation {
 
     constructor(
         genomeQuery: GenomeQuery,
         paths: List<OmnipeakDataPaths>,
-        explicitFormat: InputFormat?,
         labels: List<String>,
+        explicitFormat: InputFormat?,
         fragment: Fragment,
         unique: Boolean,
-        binSize: Int
+        binSize: Int,
+        regressControl: Boolean
     ) : this(
-        genomeQuery.build, paths, explicitFormat,
-        labels, fragment, unique, binSize,
+        genomeQuery.build, paths, labels, explicitFormat,
+        fragment, unique, binSize, regressControl,
         OmnipeakFitInformation.chromSizes(genomeQuery)
     )
 
     override val id: String
-        get() = generateId(paths, fragment, binSize, unique)
+        get() = generateId(paths, fragment, binSize, unique, regressControl)
 
 
     override val dataQuery: Query<Chromosome, DataFrame>
@@ -65,7 +67,7 @@ data class OmnipeakAnalyzeFitInformation(
                 override val id: String
                     get() = reduceIds(
                         binnedCoverageQueries!!.zip(labels)
-                            .flatMap { (s, l) -> listOf(s.id, l) } + listOf(binSize.toString())
+                            .flatMap { (s, l) -> listOf(s.id, l) }
                     )
             }
         }
@@ -86,6 +88,7 @@ data class OmnipeakAnalyzeFitInformation(
                         fragment,
                         unique,
                         binSize,
+                        regressControl,
                         forceCaching = true,
                         showLibraryInfo = true
                     )
@@ -263,21 +266,24 @@ data class OmnipeakAnalyzeFitInformation(
             paths: List<OmnipeakDataPaths>,
             fragment: Fragment,
             binSize: Int,
-            unique: Boolean
+            unique: Boolean,
+            regressControl: Boolean
         ) = reduceIds(
             paths.flatMap { listOfNotNull(it.treatment, it.control) }.map { it.stemGz } +
                     listOfNotNull(fragment.nullableInt, binSize).map { it.toString() } +
-                    listOfNotNull(if (unique) "unique" else null)
+                    listOfNotNull(if (unique) "unique" else null) +
+                    listOfNotNull(if (!regressControl) "no-regress-control" else null)
         )
 
         fun createFitInformation(
             genomeQuery: GenomeQuery,
             paths: List<OmnipeakDataPaths>,
-            explicitFormat: InputFormat?,
             labels: List<String>,
+            explicitFormat: InputFormat?,
             fragment: Fragment,
             unique: Boolean,
-            binSize: Int
+            binSize: Int,
+            regressControl: Boolean
         ): OmnipeakAnalyzeFitInformation {
             val genomeQueryWithData =
                 OmnipeakModelFitExperiment.filterGenomeQueryWithData(
@@ -285,16 +291,18 @@ data class OmnipeakAnalyzeFitInformation(
                     paths,
                     explicitFormat,
                     fragment,
-                    unique
+                    unique,
+                    regressControl
                 )
             return OmnipeakAnalyzeFitInformation(
                 genomeQueryWithData.build,
                 paths,
-                explicitFormat,
                 labels,
+                explicitFormat,
                 fragment,
                 unique,
                 binSize,
+                regressControl,
                 OmnipeakFitInformation.chromSizes(genomeQueryWithData)
             )
         }

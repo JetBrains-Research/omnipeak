@@ -10,7 +10,6 @@ import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.coverage.FixedFragment
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.checkGenomeInFitInformation
-import org.jetbrains.bio.omnipeak.peaks.OmnipeakResultAnalysis.doDeepAnalysis
 import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
 import org.jetbrains.bio.omnipeak.fit.*
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
@@ -21,6 +20,7 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.printConstants
 import org.jetbrains.bio.omnipeak.peaks.MultipleTesting
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakResult
+import org.jetbrains.bio.omnipeak.peaks.OmnipeakResultAnalysis.doDeepAnalysis
 import org.jetbrains.bio.omnipeak.peaks.Peak
 import org.jetbrains.bio.util.*
 import org.slf4j.event.Level
@@ -48,8 +48,10 @@ object OmnipeakCLAAnalyze {
                 .withValuesSeparatedBy(",")
                 .withValuesConvertedBy(PathConverter.noCheck())
 
-            acceptsAll(listOf("bw", "bigwig"),
-                "Create beta-control corrected counts per million normalized track")
+            acceptsAll(
+                listOf("bw", "bigwig"),
+                "Create beta-control corrected counts per million normalized track"
+            )
                 .availableIf("peaks")
 
             accepts(
@@ -117,6 +119,7 @@ object OmnipeakCLAAnalyze {
                     OmnipeakCLA.getFragment(options),
                     OmnipeakCLA.getBin(options),
                     OmnipeakCLA.getUnique(options),
+                    OmnipeakCLA.getRegressControl(options)
                 )
                 val fdr = options.valueOf("fdr") as Double
                 require(0 < fdr && fdr < 1) { "Illegal fdr: $fdr, expected range: (0, 1)" }
@@ -206,7 +209,7 @@ object OmnipeakCLAAnalyze {
                 // Finally get results
                 val (actualModelPath, results) = lazyResults.value
                 val fitInfo = results.fitInfo
-                check(fitInfo is AbstractOmnipeakAnalyzeFitInformation) {
+                check(fitInfo is OmnipeakAnalyzeFitInformation) {
                     "Expected ${OmnipeakAnalyzeFitInformation::class.java.simpleName}, got ${fitInfo::class.java.name}"
                 }
                 val aboutModel = results.modelInformation(actualModelPath)
@@ -220,19 +223,10 @@ object OmnipeakCLAAnalyze {
                 val bin = fitInfo.binSize
 
                 if (bigWig) {
-                    if (fitInfo !is OmnipeakAnalyzeFitInformation) {
-                        LOG.warn("Bigwig coverage is possible only for analyze command")
-                    } else {
-                        val bigWigPath = (peaksPath!!.toString() + ".bw").toPath()
-                        BigWigCoverageWriter.write(results, genomeQuery, bigWigPath, blackListPath)
-                    }
+                    val bigWigPath = (peaksPath!!.toString() + ".bw").toPath()
+                    BigWigCoverageWriter.write(results, genomeQuery, bigWigPath, blackListPath)
                 }
 
-                if (deepAnalysis) {
-                    if (fitInfo !is OmnipeakAnalyzeFitInformation) {
-                        LOG.warn("Deep analysis is possible only for analyze command")
-                    }
-                }
                 if (peaksPath != null) {
                     val peaks =
                         OmnipeakModelToPeaks.getPeaks(
@@ -262,7 +256,7 @@ object OmnipeakCLAAnalyze {
                         "${k.name}: ${k.render(v)}"
                     })
 
-                    if (deepAnalysis && fitInfo is OmnipeakAnalyzeFitInformation) {
+                    if (deepAnalysis) {
                         fitInfo.prepareData()
                         doDeepAnalysis(
                             actualModelPath,
@@ -308,7 +302,7 @@ object OmnipeakCLAAnalyze {
      * If both are available, checks that they are consistent.
      */
     internal fun prepareAndCheckTreatmentControlPaths(
-        options: OptionSet, fitInformation: AbstractOmnipeakAnalyzeFitInformation? = null, log: Boolean = false
+        options: OptionSet, fitInformation: OmnipeakAnalyzeFitInformation? = null, log: Boolean = false
     ): List<OmnipeakDataPaths> {
         val commandLineTreatmentPaths = options.valuesOf("treatment") as List<Path>
         val commandLineControlPaths = options.valuesOf("control") as List<Path>
@@ -322,7 +316,7 @@ object OmnipeakCLAAnalyze {
             if (paths != null) {
                 check(paths == fitInfoPaths) {
                     "Stored treatment-control pairs ${fitInfoPaths.joinToString()} differ from the ones inferred " +
-                            "from the command line arguments: ${paths!!.joinToString()}"
+                            "from the command line arguments: ${paths.joinToString()}"
                 }
             } else {
                 paths = fitInfoPaths
@@ -362,7 +356,7 @@ object OmnipeakCLAAnalyze {
                 modelPath
             )
             val results = OmnipeakModelFitExperiment.loadResults(modelPath = modelPath)
-            check(results.fitInfo is AbstractOmnipeakAnalyzeFitInformation) {
+            check(results.fitInfo is OmnipeakAnalyzeFitInformation) {
                 "Expected ${OmnipeakAnalyzeFitInformation::class.java.simpleName}, got ${results.fitInfo::class.java.name}"
             }
             prepareAndCheckTreatmentControlPaths(options, results.fitInfo, log = true)
@@ -387,6 +381,7 @@ object OmnipeakCLAAnalyze {
             OmnipeakCLA.getBin(options, results.fitInfo, log = true)
             OmnipeakCLA.getFragment(options, results.fitInfo, log = true)
             OmnipeakCLA.getUnique(options, results.fitInfo, log = true)
+            OmnipeakCLA.getRegressControl(options, results.fitInfo, log = true)
             val keepCacheFiles = "keep-cache" in options
             LOG.info("KEEP-CACHE: $keepCacheFiles")
             if (!keepCacheFiles) {
@@ -408,12 +403,13 @@ object OmnipeakCLAAnalyze {
             else
                 null
             if (chromosomesToProcess != null) {
-                LOG.info("CHROMOSOMES: ${chromosomesToProcess?.joinToString(", ")}")
+                LOG.info("CHROMOSOMES: ${chromosomesToProcess.joinToString(", ")}")
             }
             val explicitFormat: InputFormat? = OmnipeakCLA.readsFormat(options, log = true)
             val fragment = OmnipeakCLA.getFragment(options, log = true)
             val unique = OmnipeakCLA.getUnique(options, log = true)
             val bin = OmnipeakCLA.getBin(options, log = true)
+            val regressControl = OmnipeakCLA.getRegressControl(options, log = true)
             val fitThreshold = OmnipeakCLA.getFitThreshold(options, log = true)
             val fitMaxIterations = OmnipeakCLA.getFitMaxIteration(options, log = true)
             val hmmEstimateSNR = options.valueOf("hmm-snr") as Double
@@ -432,7 +428,7 @@ object OmnipeakCLAAnalyze {
                 val experiment = OmnipeakPeakCallingExperiment.getExperiment(
                     genomeQuery,
                     paths, explicitFormat,
-                    fragment, unique, bin,
+                    fragment, unique, bin, regressControl,
                     hmmEstimateSNR, hmmLow,
                     modelPath, fitThreshold, fitMaxIterations,
                     saveExtendedInfo, keepCacheFiles

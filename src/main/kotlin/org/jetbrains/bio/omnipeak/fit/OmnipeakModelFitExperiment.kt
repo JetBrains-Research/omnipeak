@@ -41,7 +41,6 @@ abstract class OmnipeakModelFitExperiment<
         > protected constructor(
     val fitInformation: FitInfo,
     private val modelFitter: Fitter<Model>,
-    private val modelClass: Class<out Model>,
     private val availableStates: Array<State>,
     private val nullHypothesis: NullHypothesis<State>,
     private val threshold: Double,
@@ -263,7 +262,8 @@ abstract class OmnipeakModelFitExperiment<
             paths: List<OmnipeakDataPaths>,
             explicitFormat: InputFormat?,
             fragment: Fragment,
-            unique: Boolean = true
+            unique: Boolean = true,
+            regressControl: Boolean
         ): GenomeQuery {
             val format = explicitFormat ?: InputFormat.guess(paths[0].treatment)
             check(format != null) { "Failed to guess format for ${paths[0].treatment}" }

@@ -10,7 +10,6 @@ import org.jetbrains.bio.genome.query.Query
 import org.jetbrains.bio.genome.query.ReadsQuery
 import org.jetbrains.bio.omnipeak.coverage.NormalizedCoverageQuery.Companion.analyzeCoverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_BETA_STEP
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
 import org.jetbrains.bio.util.deleteIfExists
 import org.jetbrains.bio.util.isAccessible
 import org.jetbrains.bio.util.reduceIds
@@ -49,14 +48,18 @@ class NormalizedCoverageQuery(
     val explicitFormat: ReadsFormat?,
     val fragment: Fragment,
     val unique: Boolean = true,
-    val binSize: Int = OMNIPEAK_DEFAULT_BIN,
+    val binSize: Int,
+    val regressControl: Boolean,
     val showLibraryInfo: Boolean = true,
 ) : Query<ChromosomeRange, Int> {
 
     override val id: String
         get() = reduceIds(
             listOfNotNull(
-                treatmentPath.stemGz, controlPath?.stemGz, fragment.nullableInt, if (!unique) "keepdup" else null
+                treatmentPath.stemGz, controlPath?.stemGz, fragment.nullableInt,
+                if (!unique) "keep-dup" else null,
+                binSize.toString(),
+                if (!regressControl) "no-regress-control" else null,
             ).map { it.toString() }
         )
 
@@ -84,7 +87,10 @@ class NormalizedCoverageQuery(
      * Cached value for treatment and control scales, see [analyzeCoverage]
      */
     val coveragesNormalizedInfo by lazy {
-        analyzeCoverage(genomeQuery, treatmentPath, treatmentReads.get(), controlPath, controlReads?.get(), binSize)
+        analyzeCoverage(
+            genomeQuery, treatmentPath, treatmentReads.get(), controlPath, controlReads?.get(),
+            binSize, regressControl
+        )
     }
 
     fun score(t: ChromosomeRange): Double {
@@ -107,7 +113,7 @@ class NormalizedCoverageQuery(
      */
     fun controlNormalizedScore(t: ChromosomeRange): Int {
         val treatmentCoverage = treatmentReads.get().getBothStrandsCoverage(t)
-        if (controlPath == null) {
+        if (!regressControl || controlPath == null) {
             return treatmentCoverage
         }
         val (controlScale, beta, _) = coveragesNormalizedInfo
@@ -143,7 +149,8 @@ class NormalizedCoverageQuery(
             treatmentCoverage: Coverage,
             controlPath: Path?,
             controlCoverage: Coverage?,
-            binSize: Int
+            binSize: Int,
+            regressControl: Boolean
         ): NormalizedCoverageInfo {
             if (controlPath == null || controlCoverage == null) {
                 return NormalizedCoverageInfo(0.0, 0.0, 0.0)
@@ -155,13 +162,16 @@ class NormalizedCoverageQuery(
                 controlCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()
             }
             val ncq = estimateScaleAndBeta(
-                genomeQuery, treatmentCoverage, controlCoverage, treatmentTotal, controlTotal, binSize
+                genomeQuery, treatmentCoverage, controlCoverage, treatmentTotal, controlTotal, binSize, regressControl
             )
             LOG.info(
                 "Treatment ${treatmentPath.fileName} ${"%,d".format(treatmentTotal)}, " +
                         " ${controlPath.fileName} " +
-                        "control ${"%,d".format(controlTotal)} x ${"%.3f".format(ncq.controlScale)}, " +
-                        "min correlation ${"%.3f".format(ncq.minCorrelation)}, beta ${"%.3f".format(ncq.beta)}"
+                        "control ${"%,d".format(controlTotal)} x ${"%.3f".format(ncq.controlScale)}" +
+                        (if (regressControl)
+                            ", min correlation ${"%.3f".format(ncq.minCorrelation)}, beta ${"%.3f".format(ncq.beta)}"
+                        else
+                            "")
             )
             return ncq
         }
@@ -179,6 +189,7 @@ class NormalizedCoverageQuery(
             treatmentTotal: Long,
             controlTotal: Long,
             bin: Int,
+            regressControl: Boolean,
             betaStep: Double = OMNIPEAK_BETA_STEP,
         ): NormalizedCoverageInfo {
             if (controlTotal == 0L) {
@@ -186,6 +197,9 @@ class NormalizedCoverageQuery(
             }
             // Scale control to treatment
             val controlScale = treatmentTotal.toDouble() / controlTotal
+            if (!regressControl) {
+                return NormalizedCoverageInfo(controlScale, 0.0, 0.0)
+            }
             // Estimate beta corrected signal only on not empty chromosomes
             val chromosomeWithMaxSignal = genomeQuery.get()
                 .maxByOrNull { treatmentCoverage.getBothStrandsCoverage(it.chromosomeRange) }

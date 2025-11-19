@@ -42,7 +42,7 @@ class OmnipeakPeakCallingExperiment<Model : ClassificationModel> private constru
     saveExtendedInfo: Boolean,
     keepCacheFiles: Boolean
 ) : OmnipeakModelFitExperiment<Model, OmnipeakAnalyzeFitInformation, ZLH>(
-    fitInformation, modelFitter, modelClass, ZLH.entries.toTypedArray(), NullHypothesis.of(ZLH.Z, ZLH.L),
+    fitInformation, modelFitter, ZLH.entries.toTypedArray(), NullHypothesis.of(ZLH.Z, ZLH.L),
     threshold, maxIterations,
     fixedModelPath, saveExtendedInfo, keepCacheFiles
 ) {
@@ -68,8 +68,9 @@ class OmnipeakPeakCallingExperiment<Model : ClassificationModel> private constru
             paths: List<OmnipeakDataPaths>,
             explicitFormat: InputFormat?,
             fragment: Fragment = AutoFragment,
-            unique: Boolean = true,
+            unique: Boolean,
             bin: Int,
+            regressControl: Boolean,
             hmmEstimateSNR: Double = OMNIPEAK_DEFAULT_HMM_ESTIMATE_SNR,
             hmmLow: Double = OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD,
             fixedModelPath: Path? = null,
@@ -80,8 +81,9 @@ class OmnipeakPeakCallingExperiment<Model : ClassificationModel> private constru
         ): OmnipeakPeakCallingExperiment<out ClassificationModel> {
             require(paths.isNotEmpty()) { "No data" }
             val fitInformation = OmnipeakAnalyzeFitInformation.createFitInformation(
-                genomeQuery, paths, explicitFormat, MultiLabels.generate(OMNIPEAK_TRACK_PREFIX, paths.size).toList(),
-                fragment, unique, bin
+                genomeQuery,
+                paths, MultiLabels.generate(OMNIPEAK_TRACK_PREFIX, paths.size).toList(),
+                explicitFormat, fragment, unique, bin, regressControl
             )
             return if (paths.size == 1) {
                 OmnipeakPeakCallingExperiment(

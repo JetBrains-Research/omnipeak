@@ -32,8 +32,9 @@ interface BinnedCoverageQuery : Query<Chromosome, IntArray> {
             controlPath: Path?,
             explicitFormat: InputFormat?,
             fragment: Fragment,
-            unique: Boolean = true,
-            binSize: Int = OMNIPEAK_DEFAULT_BIN,
+            unique: Boolean,
+            binSize: Int,
+            regressControl: Boolean,
             forceCaching: Boolean = false,
             showLibraryInfo: Boolean = true,
         ): BinnedCoverageQuery {
@@ -44,6 +45,7 @@ interface BinnedCoverageQuery : Query<Chromosome, IntArray> {
                     treatmentPath,
                     controlPath,
                     binSize,
+                    regressControl,
                     showLibraryInfo
                 )
             }
@@ -55,6 +57,7 @@ interface BinnedCoverageQuery : Query<Chromosome, IntArray> {
                 fragment,
                 unique,
                 binSize,
+                regressControl,
                 showLibraryInfo
             )
             if (forceCaching) {

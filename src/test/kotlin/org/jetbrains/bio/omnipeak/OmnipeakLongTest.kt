@@ -331,21 +331,14 @@ PEAKS: $peaksPath
                         "Omnipeak quiet mode didn't redirect System.out"
                     )
                 }
-                val modelId = OmnipeakAnalyzeFitInformation.generateId(
+                // Log file
+                val id = OmnipeakAnalyzeFitInformation.generateId(
                     listOf(OmnipeakDataPaths(path, null)),
                     AutoFragment,
                     OMNIPEAK_DEFAULT_BIN,
-                    true
+                    unique = true, regressControl = true
                 )
-
-                /* we also check that logging was performed normally */
-                val logId = reduceIds(
-                    listOf(
-                        modelId,
-                        OMNIPEAK_DEFAULT_FDR.toString(),
-                    )
-                )
-                val logPath = Configuration.logsPath / "$logId.log"
+                val logPath = Configuration.logsPath.glob("${id}*.log").first()
                 assertTrue(logPath.exists, "Log file not found")
                 assertTrue(logPath.size.isNotEmpty(), "Log file is empty")
             }
@@ -374,29 +367,19 @@ PEAKS: $peaksPath
                         )
                     )
 
-                    val modelId = OmnipeakAnalyzeFitInformation.generateId(
-                        listOf(OmnipeakDataPaths(path, control)),
+                    // Model test
+                    val id = OmnipeakAnalyzeFitInformation.generateId(
+                        listOf(OmnipeakDataPaths(path, null)),
                         AutoFragment,
                         OMNIPEAK_DEFAULT_BIN,
-                        true
+                        unique = true, regressControl = true
                     )
-
-                    // Check that log file was created correctly
-                    val logId = reduceIds(
-                        listOf(
-                            modelId,
-                            OMNIPEAK_DEFAULT_FDR.toString(),
-                        )
-                    )
-                    assertTrue((Configuration.logsPath / "$logId.log").exists, "Log file not found")
-
+                    assertEquals(0, Configuration.experimentsPath.glob("${id}*.omni").size)
+                    // Log file
+                    assertEquals(0, Configuration.logsPath.glob("${id}*.log").size)
                     // Genome Coverage test
                     assertEquals(0, Configuration.cachesPath.glob("coverage_${path.stemGz}_unique#*.npz").size)
                     assertEquals(0, Configuration.cachesPath.glob("coverage_${control.stemGz}_unique#*.npz").size)
-                    // Model test
-                    assertEquals(
-                        0, Configuration.experimentsPath.glob("$modelId*.omni").size
-                    )
                 }
             }
         }
@@ -425,27 +408,19 @@ PEAKS: $peaksPath
                         )
                     )
 
-                    val modelId = OmnipeakAnalyzeFitInformation.generateId(
+                    // Model test
+                    val id = OmnipeakAnalyzeFitInformation.generateId(
                         listOf(OmnipeakDataPaths(path, control)),
                         AutoFragment,
                         OMNIPEAK_DEFAULT_BIN,
-                        true
+                        unique = true, regressControl = true
                     )
-
-                    // Check that log file was created correctly
-                    val logId = reduceIds(
-                        listOf(
-                            modelId,
-                            OMNIPEAK_DEFAULT_FDR.toString(),
-                        )
-                    )
-                    assertTrue((Configuration.logsPath / "$logId.log").exists, "Log file not found")
-
+                    assertEquals(1, Configuration.experimentsPath.glob("${id}*.omni").size)
+                    // Log file
+                    assertEquals(1, Configuration.logsPath.glob("${id}*.log").size)
                     // Genome Coverage test
                     assertEquals(1, Configuration.cachesPath.glob("coverage_${path.stemGz}_unique#*.npz").size)
                     assertEquals(1, Configuration.cachesPath.glob("coverage_${control.stemGz}_unique#*.npz").size)
-                    // Model test
-                    assertEquals(1, Configuration.experimentsPath.glob("${modelId}*.omni").size)
                 }
             }
         }
@@ -1104,24 +1079,16 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                         )
                     )
                 }
-
-                val modelId = OmnipeakAnalyzeFitInformation.generateId(
+                val id = OmnipeakAnalyzeFitInformation.generateId(
                     listOf(OmnipeakDataPaths(path, null)),
                     AutoFragment,
                     OMNIPEAK_DEFAULT_BIN,
-                    true
+                    unique = true, regressControl = true
                 )
-
-                // Check that log file was created correctly
-                val logId = reduceIds(
-                    listOf(
-                        modelId,
-                        OMNIPEAK_DEFAULT_FDR.toString(),
-                    )
-                )
-                val logPath = Configuration.logsPath / "$logId.log"
-                assertTrue(logPath.exists, "Log file not found")
-                val log = FileReader(logPath.toFile()).use { it.readText() }
+                // Log file
+                assertEquals(1, Configuration.logsPath.glob("${id}*.log").size)
+                val log = FileReader(Configuration.logsPath.glob("${id}*.log").first().toFile())
+                    .use { it.readText() }
                 val errorMessage = "Model can't be trained on empty coverage, exiting."
                 assertIn(errorMessage, log)
                 assertIn(errorMessage, out)
