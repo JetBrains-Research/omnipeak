@@ -64,9 +64,15 @@ class BigWigBinnedCoverageQuery(
         return@lazy percentile
     }
 
-    // We don't know the scale of bigWig, so scale to MAX_SIGNAL_IN_BIN anyway
+    // We don't know the scale of bigWig, we want to keep it in ranges
     private val treatmentScale by lazy {
-        return@lazy binSize * MAX_SIGNAL_IN_BIN / treatmentTopPercentile
+        val s = if (treatmentTopPercentile < TOP_SIGNAL_MIN_AVG * binSize)
+            TOP_SIGNAL_MIN_AVG * binSize / treatmentTopPercentile
+        else if (treatmentTopPercentile > TOP_SIGNAL_MAX_AVG * binSize)
+            TOP_SIGNAL_MAX_AVG * binSize / treatmentTopPercentile
+        else 1.0
+        LOG.debug("Treatment scale: ${"%.3f".format(s)}")
+        return@lazy s
     }
 
     private val controlBigWig by lazy { controlPath?.let { BigWigFile.read(it) } }
@@ -191,7 +197,7 @@ class BigWigBinnedCoverageQuery(
     }
 
     private fun treatmentScore(value: Double): Double {
-        return if (treatmentScale == 1.0) value else min(value, treatmentTopPercentile) * treatmentScale
+        return min(value, treatmentTopPercentile) * treatmentScale
     }
 
     private fun checkNonNegative(coverage: List<BigSummary>, title: String) {
@@ -228,7 +234,8 @@ class BigWigBinnedCoverageQuery(
         // Equal to AbstractBedTrackView.TRIM_PERCENTILE_MAX = 99.0
         const val TRIM_PERCENTILE_MAX = 99.0
 
-        const val MAX_SIGNAL_IN_BIN = 2
+        const val TOP_SIGNAL_MAX_AVG = 2.0
+        const val TOP_SIGNAL_MIN_AVG = 0.2
     }
 }
 

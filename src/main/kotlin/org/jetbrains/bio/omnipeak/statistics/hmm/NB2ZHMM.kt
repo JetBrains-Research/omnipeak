@@ -14,6 +14,7 @@ import org.jetbrains.bio.viktor.F64Array
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * A zero-inflated constrained HMM with univariate Negative Binomial emissions and constraints.
@@ -65,32 +66,28 @@ class NB2ZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray) :
             val lowVariance = lowState.variance // Variance is computed from mean, failures, memoize
             val highVariance = highState.variance // Variance is computed from mean, failures, memoize
 
+            // Ensure low state constraint
             when {
                 // This check is required to prevent low state go too close to 0, causing too broad peaks
                 lowState.mean < guess.lowMin -> {
                     LOG.info("Low state mean ${lowState.mean} < ${guess.lowMin}, fixing...")
                     outOfLowerNoise = true
                     lowState.mean = guess.lowMin
-                    lowState.failures = estimateFailuresUsingMoments(
-                        lowState.mean,
-                        max(lowState.mean * OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER, lowVariance)
-                    )
+                    updateFailures(lowState, lowVariance)
                     updated = true
                 }
+
                 // Update variance if needed to prevent failures parameter from becoming too high
                 lowState.mean * OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER > lowVariance -> {
                     LOG.info("Low state low variance ${lowVariance / lowState.mean} < " +
                             "${OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER}, fixing...")
-                    lowState.failures = estimateFailuresUsingMoments(
-                        lowState.mean,
-                        max(lowState.mean * OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER, lowVariance)
-                    )
+                    updateFailures(lowState, lowVariance)
                     updated = true
                 }
             }
 
+            // Ensure signal-to-noise ratio constraint
             val snr = highState.mean / lowState.mean
-
             when {
                 snr < guess.signalToNoise -> {
                     if (snrPrevious < guess.signalToNoise) {
@@ -99,21 +96,20 @@ class NB2ZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray) :
                     } else {
                         LOG.info("Signal-to-noise ratio $snrPrevious, updating...")
                     }
+                    // Update both states to ensure required signal-to-noise ratio
+                    val gMean = sqrt(lowState.mean * highState.mean)
+                    lowState.mean = max(guess.lowMin, gMean / sqrt(guess.signalToNoise))
+                    updateFailures(lowState, lowVariance)
                     highState.mean = max(highState.mean, lowState.mean * guess.signalToNoise)
-                    highState.failures = estimateFailuresUsingMoments(
-                        highState.mean,
-                        max(highState.mean * OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER, highVariance)
-                    )
+                    updateFailures(highState, highVariance)
                     updated = true
                 }
+
                 // Update variance if needed to prevent failures parameter from becoming too high
                 highState.mean * OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER > highVariance -> {
                     LOG.info("High state low variance ${highVariance / highState.mean} < " +
                             "${OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER}, fixing...")
-                    highState.failures = estimateFailuresUsingMoments(
-                        highState.mean,
-                        max(highState.mean * OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER, highVariance)
-                    )
+                    updateFailures(highState, highVariance)
                     updated = true
                 }
             }
@@ -123,6 +119,12 @@ class NB2ZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray) :
                 highState.updateTransients()
             }
         }
+    }
+
+    private fun updateFailures(state: NegBinEmissionScheme, variance: Double) {
+        state.failures = estimateFailuresUsingMoments(
+            state.mean, max(state.mean * OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER, variance)
+        )
     }
 
     companion object {
