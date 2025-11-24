@@ -265,6 +265,7 @@ object OmnipeakModelToPeaks {
                 }
                 val candidates = candidateCoordinatesMap[chromosome]
                 val (start, end) = chromosomeLocationsOffsets[chromosome]!!
+                if (start == end) return@map emptyList()
                 val logPVals = genomeLogPVals.slice(start, end)
                 val logQVals = genomeLogQVals.slice(start, end)
                 candidates.mapIndexedNotNull { i, candidate ->
