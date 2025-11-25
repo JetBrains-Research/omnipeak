@@ -96,7 +96,7 @@ object OmnipeakConstants {
 
     // Rule of thumb: max when narrow marks and ATAC-seq data are not fragmented
     // Fragmentation score is an area above the curve of relative candidates number by gap
-    const val OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP = 500
+    const val OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP = 1000
 
     // When calling summits, min summit length x average single mode peak length
     const val OMNIPEAK_SUMMITS_MIN_LENGTH = 0.5
