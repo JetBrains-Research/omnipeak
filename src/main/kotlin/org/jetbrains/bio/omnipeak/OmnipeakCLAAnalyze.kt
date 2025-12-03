@@ -180,7 +180,7 @@ object OmnipeakCLAAnalyze {
                     if (gap != null) {
                         LOG.info("GAP: $gap")
                     }
-                    if (gap == null) {
+                    if (gap == null && fragmentation < Int.MAX_VALUE) {
                         LOG.info("FRAGMENTATION MIN THRESHOLD: $fragmentation")
                     }
                     LOG.info("CLIP: $clip")
