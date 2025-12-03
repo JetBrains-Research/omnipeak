@@ -1,7 +1,7 @@
 [![JetBrains Research](https://jb.gg/badges/research.svg)](https://confluence.jetbrains.com/display/ALL/JetBrains+on+GitHub)
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://opensource.org/licenses/MIT)
 [![tests](http://teamcity.jetbrains.com/app/rest/builds/buildType:(id:BioLabs_Omnipeak)/statusIcon.svg)](http://teamcity.jetbrains.com/viewType.html?buildTypeId=BioLabs_Omnipeak&guest=1)
-[![DOI](https://zenodo.org/badge/1023483418.svg)](https://doi.org/10.5281/zenodo.17371179)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17712544.svg)](https://doi.org/10.5281/zenodo.17712544)
 
 OmniPeak
 ========
