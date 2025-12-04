@@ -6,6 +6,8 @@ import org.jetbrains.bio.genome.*
 import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
+import org.jetbrains.bio.omnipeak.coverage.BigWigBinnedCoverageQuery
+import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SCORE_BLOCKS
@@ -418,8 +420,10 @@ object OmnipeakModelToPeaks {
         if (candidates.isEmpty()) {
             return emptyList()
         }
+        // Disable clipping for bigwig queries since the precision itself is quite low
         val canEstimateScore = fitInfo is OmnipeakAnalyzeFitInformation &&
-                fitInfo.binnedCoverageQueries?.all { it.areCachesPresent() } ?: false
+                fitInfo.binnedCoverageQueries?.all {
+                    it !is BigWigBinnedCoverageQuery && it.areCachesPresent() } ?: false
         return candidates.mapNotNull { (from, to) ->
             cancellableState?.checkCanceled()
             var start = offsets[from]

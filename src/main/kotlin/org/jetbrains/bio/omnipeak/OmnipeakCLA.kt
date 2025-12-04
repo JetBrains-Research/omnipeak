@@ -145,7 +145,8 @@ compare                         Differential peak calling
             ).withRequiredArg()
 
             accepts("clip", "Clip max threshold 0-1 to improve peaks density using local signal coverage.\n" +
-                    "Recommended for TFs, narrow histone marks and ATAC-seq, 0 to disable")
+                    "Recommended for TFs, narrow histone marks and ATAC-seq, 0 to disable.\n" +
+                    "Disabled when processing BigWig files.")
                 .withRequiredArg()
                 .ofType(Double::class.java)
                 .defaultsTo(OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL)

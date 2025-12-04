@@ -13,7 +13,6 @@ import org.jetbrains.bio.genome.format.BedFormat
 import org.jetbrains.bio.genome.query.ReadsQuery
 import org.jetbrains.bio.genome.toQuery
 import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
-import org.jetbrains.bio.omnipeak.coverage.CoverageSampler.sampleControlCoverage
 import org.jetbrains.bio.omnipeak.coverage.CoverageSampler.sampleCoverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_BIN
