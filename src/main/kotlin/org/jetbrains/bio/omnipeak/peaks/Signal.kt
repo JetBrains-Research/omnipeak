@@ -19,6 +19,10 @@ import kotlin.math.min
 
 object Signal {
 
+    private const val MAX_SIGNAL_LOCATIONS = 1000
+
+    private const val MAX_NOISE_LOCATIONS = 1000
+
     fun estimateGenomeSignalNoiseAverage(
         genomeQuery: GenomeQuery,
         fitInfo: OmnipeakFitInformation,
@@ -26,8 +30,10 @@ object Signal {
         coverageComputable: (ChromosomeRange) -> Double,
         parallel: Boolean
     ): Pair<Double, Double> {
+        val signalLocations = AtomicInteger()
         val sumSignalScoreA = AtomicDouble()
         val sumSignalLengthA = AtomicLong()
+        val noiseLocations = AtomicInteger()
         val sumNoiseScoreA = AtomicDouble()
         val sumNoiseLengthA = AtomicLong()
         genomeQuery.get().map { chromosome ->
@@ -39,16 +45,20 @@ object Signal {
                 val offsets = fitInfo.offsets(chromosome)
                 var prevNoiseStart = 0
                 chrCandidates.forEach { (from, to) ->
+                    if (signalLocations.get() >= MAX_SIGNAL_LOCATIONS &&
+                        noiseLocations.get() >= MAX_NOISE_LOCATIONS) return@forEach
                     val start = offsets[from]
                     val end = if (to < offsets.size) offsets[to] else chromosome.length
                     val range = ChromosomeRange(start, end, chromosome)
                     val score = coverageComputable(range)
                     sumSignalScoreA.addAndGet(score)
                     sumSignalLengthA.addAndGet(end.toLong() - start)
+                    signalLocations.incrementAndGet()
                     val rangeNoise = ChromosomeRange(prevNoiseStart, start, chromosome)
                     val scoreNoise = coverageComputable(rangeNoise)
                     sumNoiseScoreA.addAndGet(scoreNoise)
                     sumNoiseLengthA.addAndGet(start.toLong() - prevNoiseStart)
+                    noiseLocations.incrementAndGet()
                     prevNoiseStart = end
                 }
                 if (prevNoiseStart < chromosome.length) {
