@@ -44,22 +44,27 @@ class BigWigBinnedCoverageQuery(
     private val treatmentTotalCoverage by lazy { treatmentBigWig.totalSummary.sum }
 
     private val treatmentTopPercentile by lazy {
-        val percentile = genomeQuery.get().maxOf { chromosome ->
+        val matches = genomeQuery.get().mapNotNull {
             // Check if chromosome exists in BigWig file - 0 if chromosome not found
-            val matchedBfChr = findMatchedChromosome(treatmentBigWig, chromosome.name) ?: return@maxOf 0.0
-            // Calculate number of bins
-            val binsCount = chromosome.length / binSize + 1
-            // Use summarize to get coverage data for the entire chromosome
-            val data = treatmentBigWig.summarize(
-                matchedBfChr, 0, chromosome.length, binsCount
-            ).map { it.value() }.toDoubleArray()
-            // Do not use StatUtils.percentile(scores.toArray(), XX) to avoid redundant
-            //   score array copying
-            object : Percentile(TRIM_PERCENTILE_MAX) {
-                // force Percentile not to copy scores
-                override fun getWorkArray(values: DoubleArray?, begin: Int, length: Int) = data
-            }.evaluate(data)
+            val match = findMatchedChromosome(treatmentBigWig, it.name)
+            if (match != null) {
+                it to match
+            } else null
         }
+        if (matches.isEmpty()) return@lazy 0.0
+        val (chromosome, matchedBfChr) = matches.maxBy { it.first.length }
+        // Calculate number of bins
+        val binsCount = chromosome.length / binSize + 1
+        // Use summarize to get coverage data for the entire chromosome
+        val data = treatmentBigWig.summarize(
+            matchedBfChr, 0, chromosome.length, binsCount
+        ).map { it.value() }.toDoubleArray()
+        // Do not use StatUtils.percentile(scores.toArray(), XX) to avoid redundant
+        //   score array copying
+        val percentile = object : Percentile(TRIM_PERCENTILE_MAX) {
+            // force Percentile not to copy scores
+            override fun getWorkArray(values: DoubleArray?, begin: Int, length: Int) = data
+        }.evaluate(data)
         LOG.debug("Treatment top $TRIM_PERCENTILE_MAX percentile: ${"%.3f".format(percentile)}")
         return@lazy percentile
     }
