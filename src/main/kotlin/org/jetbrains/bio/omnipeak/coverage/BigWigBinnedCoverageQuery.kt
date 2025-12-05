@@ -75,6 +75,8 @@ class BigWigBinnedCoverageQuery(
         return@lazy s
     }
 
+    private val controlScale by lazy { treatmentTotalCoverage * treatmentScale / controlTotalCoverage }
+
     private val controlBigWig by lazy { controlPath?.let { BigWigFile.read(it) } }
 
     private val controlTotalCoverage by lazy { controlBigWig?.totalSummary?.sum ?: 0.0 }
@@ -92,11 +94,7 @@ class BigWigBinnedCoverageQuery(
             matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, 1
         )
 
-        return if (summaries.isNotEmpty()) {
-            summaries[0].sum
-        } else {
-            0.0
-        }
+        return if (summaries.isNotEmpty()) treatmentScore(summaries[0].sum) else 0.0
     }
 
     override fun controlAvailable(): Boolean {
@@ -118,11 +116,7 @@ class BigWigBinnedCoverageQuery(
             matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, 1
         )
 
-        return if (summaries.isNotEmpty()) {
-            summaries[0].sum
-        } else {
-            0.0
-        }
+        return if (summaries.isNotEmpty()) controlScore(summaries[0].sum) else 0.0
     }
 
     override fun controlNormalizedScore(chromosomeRange: ChromosomeRange): Int {
@@ -130,8 +124,7 @@ class BigWigBinnedCoverageQuery(
             return score(chromosomeRange).toInt()
         }
         // Scale control to treatment
-        val controlScale = treatmentTotalCoverage * treatmentScale / controlTotalCoverage
-        return max(0.0, score(chromosomeRange) - controlScore(chromosomeRange) * controlScale).toInt()
+        return max(0.0, score(chromosomeRange) - controlScore(chromosomeRange)).toInt()
     }
 
     override fun areCachesPresent(): Boolean {
@@ -178,7 +171,6 @@ class BigWigBinnedCoverageQuery(
             }
         }
         // Scale control to treatment
-        val controlScale = treatmentTotalCoverage * treatmentScale / controlTotalCoverage
         val controlCoverage = controlBigWig!!.summarize(
             matchedBfChr, 0, chrLength, binsCount
         )
@@ -186,9 +178,8 @@ class BigWigBinnedCoverageQuery(
 
         return IntArray(binsCount) { i ->
             if (i < treatmentCoverage.size) {
-                max(
-                    0.0, treatmentScore(treatmentCoverage[i].value()) -
-                            controlCoverage[i].value() * controlScale
+                max(0.0,
+                    treatmentScore(treatmentCoverage[i].value()) - controlScore(controlCoverage[i].value())
                 ).toInt()
             } else {
                 0
@@ -196,9 +187,10 @@ class BigWigBinnedCoverageQuery(
         }
     }
 
-    private fun treatmentScore(value: Double): Double {
-        return min(value, treatmentTopPercentile) * treatmentScale
-    }
+
+    private fun treatmentScore(value: Double): Double = min(value, treatmentTopPercentile) * treatmentScale
+
+    private fun controlScore(value: Double): Double = value * controlScale
 
     private fun checkNonNegative(coverage: List<BigSummary>, title: String) {
         coverage.forEach {
