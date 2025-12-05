@@ -1,5 +1,6 @@
 package org.jetbrains.bio.omnipeak.coverage
 
+import org.apache.commons.math3.stat.descriptive.rank.Percentile
 import org.jetbrains.bio.big.BigSummary
 import org.jetbrains.bio.big.BigWigFile
 import org.jetbrains.bio.genome.Chromosome
@@ -42,7 +43,7 @@ class BigWigBinnedCoverageQuery(
 
     private val treatmentTotalCoverage by lazy { treatmentBigWig.totalSummary.sum }
 
-    private val maxValue by lazy {
+    private val treatmentTopPercentile by lazy {
         val matches = genomeQuery.get().mapNotNull {
             // Check if chromosome exists in BigWig file - 0 if chromosome not found
             val match = findMatchedChromosome(treatmentBigWig, it.name)
@@ -55,17 +56,25 @@ class BigWigBinnedCoverageQuery(
         // Calculate number of bins
         val binsCount = chromosome.length / binSize + 1
         // Use summarize to get coverage data for the entire chromosome
-        return@lazy treatmentBigWig.summarize(
+        val data = treatmentBigWig.summarize(
             matchedBfChr, 0, chromosome.length, binsCount
-        ).maxOf { it.value() }
+        ).map { it.value() }.toDoubleArray()
+        // Do not use StatUtils.percentile(scores.toArray(), XX) to avoid redundant
+        //   score array copying
+        val percentile = object : Percentile(TRIM_PERCENTILE_MAX) {
+            // force Percentile not to copy scores
+            override fun getWorkArray(values: DoubleArray?, begin: Int, length: Int) = data
+        }.evaluate(data)
+        LOG.debug("Treatment top $TRIM_PERCENTILE_MAX percentile: ${"%.3f".format(percentile)}")
+        return@lazy percentile
     }
 
     // We don't know the scale of bigWig, we want to keep it in ranges
     private val treatmentScale by lazy {
-        val s = if (maxValue < TOP_SIGNAL_MIN_AVG * binSize)
-            TOP_SIGNAL_MIN_AVG * binSize / maxValue
-        else if (maxValue > TOP_SIGNAL_MAX_AVG * binSize)
-            TOP_SIGNAL_MAX_AVG * binSize / maxValue
+        val s = if (treatmentTopPercentile < TOP_SIGNAL_MIN_AVG * binSize)
+            TOP_SIGNAL_MIN_AVG * binSize / treatmentTopPercentile
+        else if (treatmentTopPercentile > TOP_SIGNAL_MAX_AVG * binSize)
+            TOP_SIGNAL_MAX_AVG * binSize / treatmentTopPercentile
         else 1.0
         LOG.debug("Treatment scale: ${"%.3f".format(s)}")
         return@lazy s
@@ -184,7 +193,7 @@ class BigWigBinnedCoverageQuery(
     }
 
 
-    private fun treatmentScore(value: Double): Double = value * treatmentScale
+    private fun treatmentScore(value: Double): Double = min(value, treatmentTopPercentile) * treatmentScale
 
     private fun controlScore(value: Double): Double = value * controlScale
 
@@ -218,6 +227,9 @@ class BigWigBinnedCoverageQuery(
 
     companion object {
         private val LOG = LoggerFactory.getLogger(BigWigBinnedCoverageQuery::class.java)
+
+        // Equal to AbstractBedTrackView.TRIM_PERCENTILE_MAX = 99.0
+        const val TRIM_PERCENTILE_MAX = 99.0
 
         const val TOP_SIGNAL_MAX_AVG = 2.0
         const val TOP_SIGNAL_MIN_AVG = 0.2
