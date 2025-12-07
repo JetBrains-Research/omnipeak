@@ -923,7 +923,6 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                         "-cs", genome.chromSizesPath.toString(),
                         "-w", dir.toString(),
                         "--peaks", bedPath.toString(),
-                        "-fdr", "0.2",
                         "-t", bigWigPath.toString()
                     )
                 )

@@ -58,7 +58,7 @@ class BigWigBinnedCoverageQuery(
         // Use summarize to get coverage data for the entire chromosome
         val data = treatmentBigWig.summarize(
             matchedBfChr, 0, chromosome.length, binsCount
-        ).map { it.value() }.toDoubleArray()
+        ).map { it.value() }.filter { it > 0 }.toDoubleArray()
         // Do not use StatUtils.percentile(scores.toArray(), XX) to avoid redundant
         //   score array copying
         val percentile = object : Percentile(TRIM_PERCENTILE_MAX) {
