@@ -6,6 +6,7 @@ import org.jetbrains.bio.experiment.Configuration
 import org.jetbrains.bio.genome.Genome
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.Location
+import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.AutoFragment
@@ -27,6 +28,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import java.io.FileReader
+import java.nio.file.Path
 import java.text.DecimalFormatSymbols
 import java.util.*
 import kotlin.test.assertEquals
@@ -669,21 +671,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
     @Test
     fun analyzeSampledEnrichment() {
         withTempFile("track", ".bed.gz") { path ->
-            val enrichedRegions = genomeMap(TO) {
-                val enriched = BitSet()
-                if (it.name == "chr1") {
-                    enriched.set(1000, 2000)
-                }
-                enriched
-            }
-
-            val zeroRegions = genomeMap(TO) {
-                val zeroes = BitSet()
-                if (it.name == "chr1") {
-                    zeroes[3000] = 4000
-                }
-                zeroes
-            }
+            val (enrichedRegions, zeroRegions) = markRegions()
             sampleCoverage(
                 path,
                 TO,
@@ -706,15 +694,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                     )
                 )
                 // Check created bed file
-                assertTrue(
-                    Location(
-                        1100 * OMNIPEAK_DEFAULT_BIN,
-                        1900 * OMNIPEAK_DEFAULT_BIN,
-                        TO.get().first()
-                    )
-                            in LocationsMergingList.load(TO, bedPath),
-                    "Expected location not found in called peaks"
-                )
+                checkLocations(bedPath)
                 // Check correct log file name
                 val logPath = Configuration.logsPath / "${bedPath.stem}.log"
                 assertTrue(logPath.exists, "Log file not found")
@@ -732,21 +712,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
         // NOTE[oshpynov] we use .bed.gz here for the ease of sampling result save
         withTempDirectory("track") { dir ->
             val path = dir / "track.bed.gz"
-            val enrichedRegions = genomeMap(TO) {
-                val enriched = BitSet()
-                if (it.name == "chr1") {
-                    enriched.set(1000, 2000)
-                }
-                enriched
-            }
-
-            val zeroRegions = genomeMap(TO) {
-                val zeroes = BitSet()
-                if (it.name == "chr1") {
-                    zeroes[3000] = 4000
-                }
-                zeroes
-            }
+            val (enrichedRegions, zeroRegions) = markRegions()
 
             sampleCoverage(
                 path, TO, OMNIPEAK_DEFAULT_BIN, enrichedRegions, zeroRegions,
@@ -779,22 +745,14 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                         )
                     )
                     // Check created bed file
-                    assertTrue(
-                        Location(
-                            1100 * OMNIPEAK_DEFAULT_BIN,
-                            1900 * OMNIPEAK_DEFAULT_BIN,
-                            TO.get().first()
-                        )
-                                in LocationsMergingList.load(TO, peaksPath),
-                        "Expected location not found in called peaks"
-                    )
+                    checkLocations(peaksPath)
 
                     val fitResults = OmnipeakModelFitExperiment.loadResults(Genome["to1"].toQuery(), modelPath)
                     assertTrue(fitResults.fitInfo.regressControl)
 
                     val data = fitResults.fitInfo.dataQuery.apply(TO.get().first())
                     val scores = data.sliceAsInt(data.labels.first())
-                    assertTrue((1100 until 1900).map { scores[it] }.all { it < 100 })
+                    assertTrue((1000 until 1050).map { scores[it] }.all { it < 100 })
                 }
 
                 assertIn("CONTROL: $control", out)
@@ -808,21 +766,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
         // NOTE[oshpynov] we use .bed.gz here for the ease of sampling result save
         withTempDirectory("track") { dir ->
             val path = dir / "track.bed.gz"
-            val enrichedRegions = genomeMap(TO) {
-                val enriched = BitSet()
-                if (it.name == "chr1") {
-                    enriched.set(1000, 2000)
-                }
-                enriched
-            }
-
-            val zeroRegions = genomeMap(TO) {
-                val zeroes = BitSet()
-                if (it.name == "chr1") {
-                    zeroes[3000] = 4000
-                }
-                zeroes
-            }
+            val (enrichedRegions, zeroRegions) = markRegions()
 
             sampleCoverage(
                 path, TO, OMNIPEAK_DEFAULT_BIN, enrichedRegions, zeroRegions,
@@ -855,22 +799,14 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                 )
             }
             // Check created bed file
-            assertTrue(
-                Location(
-                    1100 * OMNIPEAK_DEFAULT_BIN,
-                    1900 * OMNIPEAK_DEFAULT_BIN,
-                    TO.get().first()
-                )
-                        in LocationsMergingList.load(TO, peaksPath),
-                "Expected location not found in called peaks"
-            )
+            checkLocations(peaksPath)
 
             val fitResults = OmnipeakModelFitExperiment.loadResults(Genome["to1"].toQuery(), modelPath)
             assertFalse(fitResults.fitInfo.regressControl)
 
             val data = fitResults.fitInfo.dataQuery.apply(TO.get().first())
             val scores = data.sliceAsInt(data.labels.first())
-            assertTrue((1100 until 1900).map { scores[it] }.all { it == 100 })
+            assertTrue((1010 until 1040).map { scores[it] }.all { it == 100 })
 
             assertIn("NO CONTROL REGRESSION: true", out)
         }
@@ -880,21 +816,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
     @Test
     fun analyzeSampledBigWigEnrichment() {
         withTempFile("track", ".bed.gz") { path ->
-            val enrichedRegions = genomeMap(TO) {
-                val enriched = BitSet()
-                if (it.name == "chr1") {
-                    enriched.set(1000, 2000)
-                }
-                enriched
-            }
-
-            val zeroRegions = genomeMap(TO) {
-                val zeroes = BitSet()
-                if (it.name == "chr1") {
-                    zeroes[3000] = 4000
-                }
-                zeroes
-            }
+            val (enrichedRegions, zeroRegions) = markRegions()
             sampleCoverage(
                 path,
                 TO,
@@ -927,15 +849,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                     )
                 )
                 // Check created bed file
-                assertTrue(
-                    Location(
-                        1100 * OMNIPEAK_DEFAULT_BIN,
-                        1900 * OMNIPEAK_DEFAULT_BIN,
-                        TO.get().first()
-                    )
-                            in LocationsMergingList.load(TO, bedPath),
-                    "Expected location not found in called peaks"
-                )
+                checkLocations(bedPath)
                 // Check correct log file name
                 val logPath = Configuration.logsPath / "${bedPath.stem}.log"
                 assertTrue(logPath.exists, "Log file not found")
@@ -952,21 +866,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
     @Test
     fun checkNegativeBigWig() {
         withTempFile("track", ".bed.gz") { path ->
-            val enrichedRegions = genomeMap(TO) {
-                val enriched = BitSet()
-                if (it.name == "chr1") {
-                    enriched.set(1000, 2000)
-                }
-                enriched
-            }
-
-            val zeroRegions = genomeMap(TO) {
-                val zeroes = BitSet()
-                if (it.name == "chr1") {
-                    zeroes[3000] = 4000
-                }
-                zeroes
-            }
+            val (enrichedRegions, zeroRegions) = markRegions()
             sampleCoverage(
                 path,
                 TO,
@@ -1008,21 +908,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
 
     @Test
     fun analyzeSampledEnrichmentReplicated() {
-        val enrichedRegions = genomeMap(TO) {
-            val enriched = BitSet()
-            if (it.name == "chr1") {
-                enriched.set(1000, 2000)
-            }
-            enriched
-        }
-
-        val zeroRegions = genomeMap(TO) {
-            val zeroes = BitSet()
-            if (it.name == "chr1") {
-                zeroes[3000] = 4000
-            }
-            zeroes
-        }
+        val (enrichedRegions, zeroRegions) = markRegions()
         withTempFile("track1", ".bed.gz") { coveragePath1 ->
             withTempFile("track2", ".bed.gz") { coveragePath2 ->
                 sampleCoverage(
@@ -1061,8 +947,8 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                     val peaksLocations = LocationsMergingList.load(TO, peaksPath)
                     assertTrue(
                         Location(
-                            1100 * OMNIPEAK_DEFAULT_BIN,
-                            1900 * OMNIPEAK_DEFAULT_BIN,
+                            1000 * OMNIPEAK_DEFAULT_BIN,
+                            1050 * OMNIPEAK_DEFAULT_BIN,
                             TO.get().first()
                         ) in peaksLocations,
                         "Expected location not found in called peaks"
@@ -1076,21 +962,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
     @Test
     fun analyzeSampledEnrichmentReusingModel() {
         withTempFile("track", ".bed.gz") { path ->
-            val enrichedRegions = genomeMap(TO) {
-                val enriched = BitSet()
-                if (it.name == "chr1") {
-                    enriched.set(1000, 2000)
-                }
-                enriched
-            }
-
-            val zeroRegions = genomeMap(TO) {
-                val zeroes = BitSet()
-                if (it.name == "chr1") {
-                    zeroes[3000] = 4000
-                }
-                zeroes
-            }
+            val (enrichedRegions, zeroRegions) = markRegions()
             sampleCoverage(
                 path,
                 TO,
@@ -1123,14 +995,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                     )
                 )
                 // Check created bed file
-                assertTrue(
-                    Location(
-                        1100 * OMNIPEAK_DEFAULT_BIN,
-                        1900 * OMNIPEAK_DEFAULT_BIN,
-                        TO.get().first()
-                    ) in LocationsMergingList.load(TO, bedPath),
-                    "Expected location not found in called peaks"
-                )
+                checkLocations(bedPath)
             }
         }
     }
@@ -1138,21 +1003,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
     @Test
     fun analyzeSampledEnrichmentReusingModelNoKeepCache() {
         withTempFile("track", ".bed.gz") { path ->
-            val enrichedRegions = genomeMap(TO) {
-                val enriched = BitSet()
-                if (it.name == "chr1") {
-                    enriched.set(1000, 2000)
-                }
-                enriched
-            }
-
-            val zeroRegions = genomeMap(TO) {
-                val zeroes = BitSet()
-                if (it.name == "chr1") {
-                    zeroes[3000] = 4000
-                }
-                zeroes
-            }
+            val (enrichedRegions, zeroRegions) = markRegions()
             sampleCoverage(
                 path,
                 TO,
@@ -1201,8 +1052,6 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                 zeroes.set(0, it.length / OMNIPEAK_DEFAULT_BIN)
                 zeroes
             }
-
-
 
             sampleCoverage(
                 path,
@@ -1267,6 +1116,40 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
             }
         }
     }
+
+    private fun markRegions(): Pair<GenomeMap<BitSet>, GenomeMap<BitSet>> {
+        val enrichedRegions = genomeMap(TO) {
+            val enriched = BitSet()
+            if (it.name == "chr1") {
+                enriched.set(1000, 1050)
+                enriched.set(1300, 1400)
+                enriched.set(1700, 2000)
+            }
+            enriched
+        }
+
+        val zeroRegions = genomeMap(TO) {
+            val zeroes = BitSet()
+            if (it.name == "chr1") {
+                zeroes[3000] = 4000
+            }
+            zeroes
+        }
+        return Pair(enrichedRegions, zeroRegions)
+    }
+
+    private fun checkLocations(bedPath: Path) {
+        val chromosome = TO.get().first()
+        val peaks = LocationsMergingList.load(TO, bedPath)
+        listOf(
+            Location(1000 * OMNIPEAK_DEFAULT_BIN, 1050 * OMNIPEAK_DEFAULT_BIN, chromosome),
+            Location(1300 * OMNIPEAK_DEFAULT_BIN, 1400 * OMNIPEAK_DEFAULT_BIN, chromosome),
+            Location(1700 * OMNIPEAK_DEFAULT_BIN, 2000 * OMNIPEAK_DEFAULT_BIN, chromosome),
+        ).forEach {
+            assertTrue(it in peaks, "Expected location not found in called peaks")
+        }
+    }
+
 
     companion object {
         internal val TO = GenomeQuery(Genome["to1"])
