@@ -24,6 +24,11 @@ Features
   interactive visualization and fine-tuning
 * _Experimentally_ supports multi-replicated mode and differential peak calling mode
 
+Citation
+--------
+
+<i>Oleg Shpynov, Maxim N Artyomov, Accurate chromatin marks peak calling with Omnipeak, Nucleic Acids Research, Volume 54, Issue 1, 13 January 2026, gkaf1454, https://doi.org/10.1093/nar/gkaf1454</i>
+
 Requirements
 ------------
 
