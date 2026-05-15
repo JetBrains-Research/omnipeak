@@ -141,7 +141,8 @@ object OmnipeakModelToPeaks {
             blackListPath,
             name,
             parallel,
-            cancellableState
+            cancellableState,
+            sensitivity
         )
         return OmnipeakResult(fdr, sensitivity, gap, peaks)
     }
@@ -159,7 +160,8 @@ object OmnipeakModelToPeaks {
         blackListPath: Path?,
         name: String?,
         parallel: Boolean,
-        cancellableState: CancellableState?
+        cancellableState: CancellableState?,
+        sensitivity: Double
     ): List<Peak> {
         var candidatesOrSummitsMap = candidatesMap
         if (summits) {
@@ -173,6 +175,29 @@ object OmnipeakModelToPeaks {
                     val chrCandidates = candidatesMap[chromosome]
                     getChromosomeSummits(chromosome, fitInfo, chrCandidates, singleModeLength)
                 }
+
+                // Filter summits requiring at least some significant signal
+                val summitsFilteredCount = AtomicInteger(0)
+                candidatesOrSummitsMap = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
+                    cancellableState?.checkCanceled()
+                    if (!fitInfo.containsChromosomeInfo(chromosome)) {
+                        return@genomeMap emptyList()
+                    }
+                    val summits = candidatesOrSummitsMap[chromosome]
+                    val logNullMemberships = logNullMembershipsMap[chromosome]
+
+                    // Filter: each summit must contain at least one significant bin
+                    val filtered = summits.filter { summit ->
+                        val startBin = summit.startOffset
+                        val endBin = min(summit.endOffset, logNullMemberships.length)
+                        (startBin until endBin).any { bin ->
+                            logNullMemberships[bin] <= sensitivity
+                        }
+                    }
+                    summitsFilteredCount.addAndGet(summits.size - filtered.size)
+                    filtered
+                }
+                LOG.info("${name ?: ""} Filtered ${summitsFilteredCount.get()} summits without significant signal")
             }
         }
 
