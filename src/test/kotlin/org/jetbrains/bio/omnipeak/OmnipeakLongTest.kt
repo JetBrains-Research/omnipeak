@@ -864,6 +864,40 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
         }
     }
 
+    @Test
+    fun writeBigWigAfterCoverageCleanup() {
+        withTempDirectory("work") { dir ->
+            withTempFile("track", ".bed.gz", dir) { path ->
+                withTempFile("control", ".bed.gz", dir) { control ->
+                    sampleCoverage(path, TO, OMNIPEAK_DEFAULT_BIN, goodQuality = true)
+                    sampleCoverage(control, TO, OMNIPEAK_DEFAULT_BIN, goodQuality = false)
+
+                    val peaksPath = dir / "peaks.bed"
+                    OmnipeakCLA.main(
+                        arrayOf(
+                            "analyze",
+                            "-cs", Genome["to1"].chromSizesPath.toString(),
+                            "--workdir", dir.toString(),
+                            "-t", path.toString(),
+                            "-c", control.toString(),
+                            "--threads", THREADS.toString(),
+                            "--peaks", peaksPath.toString(),
+                            "--bigwig",
+                        )
+                    )
+
+                    val bigWigPath = (peaksPath.toString() + ".bw").toPath()
+                    assertEquals(0, Configuration.cachesPath.glob("coverage_${path.stemGz}_unique#*.npz").size)
+                    assertEquals(0, Configuration.cachesPath.glob("coverage_${control.stemGz}_unique#*.npz").size)
+                    assertTrue(peaksPath.exists, "Peaks were not created at $peaksPath")
+                    assertTrue(peaksPath.size.isNotEmpty(), "Peaks file $peaksPath is empty")
+                    assertTrue(bigWigPath.exists, "BigWig was not created at $bigWigPath")
+                    assertTrue(bigWigPath.size.isNotEmpty(), "BigWig file $bigWigPath is empty")
+                }
+            }
+        }
+    }
+
 
     @Test
     fun checkNegativeBigWig() {

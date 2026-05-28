@@ -10,6 +10,7 @@ Released on May 28th, 2026
 
 - Filter out summits by significance
 - Clean up .npz coverage files when no `--keep-cache` is set
+- Fixed `--bigwig` output after .npz coverage cache cleanup
 
 
 Version 1.3

@@ -36,9 +36,6 @@ object BigWigCoverageWriter {
         check(fitInfo.binnedCoverageQueries != null) {
             "Please use prepareData before!"
         }
-        check(fitInfo.binnedCoverageQueries!!.all { it.areCachesPresent() }) {
-            "Coverage information is not available"
-        }
 
         val blackList = if (blackListPath != null) {
             LOG.info("Loading blacklist regions: $blackListPath")
