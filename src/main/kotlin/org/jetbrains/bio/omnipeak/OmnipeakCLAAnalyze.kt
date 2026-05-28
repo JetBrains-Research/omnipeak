@@ -106,6 +106,7 @@ object OmnipeakCLAAnalyze {
                 OmnipeakCLA.checkMemory()
                 val peaksPath = options.valueOf("peaks") as Path?
                 val modelPath = options.valueOf("model") as Path?
+                val modelAlreadyExists = modelPath != null && modelPath.exists && modelPath.size.isNotEmpty()
                 val deepAnalysis = "deep-analysis" in options
                 val blackListPath = options.valueOf("blacklist") as Path?
                 val keepCacheFiles = "keep-cache" in options
@@ -267,7 +268,7 @@ object OmnipeakCLAAnalyze {
                         )
                     }
                 }
-                if (modelPath == null && !keepCacheFiles) {
+                if (!modelAlreadyExists && !keepCacheFiles) {
                     LOG.debug("Clean coverage caches")
                     fitInfo.cleanCaches()
                 }

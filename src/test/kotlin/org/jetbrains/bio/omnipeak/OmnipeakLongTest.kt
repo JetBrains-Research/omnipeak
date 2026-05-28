@@ -454,6 +454,8 @@ PEAKS: $peaksPath
                     )
                     assertTrue(modelPath.exists, "Model was not created at $modelPath")
                     assertTrue(modelPath.size.isNotEmpty(), "Model file $modelPath is empty")
+                    assertEquals(0, Configuration.cachesPath.glob("coverage_${path.stemGz}_unique#*.npz").size)
+                    assertEquals(0, Configuration.cachesPath.glob("coverage_${control.stemGz}_unique#*.npz").size)
                     val (reloadOut, reloadErr) = Logs.captureLoggingOutput {
                         OmnipeakCLA.main(
                             arrayOf(
