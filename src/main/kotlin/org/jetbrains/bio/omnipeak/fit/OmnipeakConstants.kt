@@ -66,7 +66,7 @@ object OmnipeakConstants {
     /**
      * The maximum number of iterations to perform during the fitting
      */
-    const val OMNIPEAK_DEFAULT_FIT_MAX_ITERATIONS = 10
+    const val OMNIPEAK_DEFAULT_FIT_MAX_ITERATIONS = 20
 
     /**
      * Number of points between relaxed and strict sensitivity to analyse
