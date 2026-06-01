@@ -9,7 +9,8 @@ import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.containers.toRangeMergingList
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FDR
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_GAP_MIN_DELTA
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_MIN_SENSITIVITY
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SENSITIVITY_N
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
@@ -197,38 +198,19 @@ object SensitivityGap {
     }
 
     /**
-     * Estimates the fragmentation gap based on candidate data and a fragmentation threshold.
-     * Fragmentation score is computed as the area above the curve of the plot of
-     * candidates number with gap to the candidates number without gap.
+     * Estimates the convergence point of the number of candidates while increasing gap
      *
-     * @param candidatesNs Numbers of candidates by gap to use for the fragmentation score estimation.
-     * @param name An optional name or identifier for logging purposes.
-     * @param binSize The model bin size to use for the fragmentation score estimation.
-     * @param fragmentationThresholdBp The fragmentation threshold value which determines if further processing is needed.
-     * @return An integer representing the fragmentation compensation gap.
-     * Returns 0 if no fragmentation is detected.
+     * @param candidatesNs Numbers of candidates by gap to use for the gap estimation.
+     * @return An integer representing the gap.
      */
-    fun estimateGap(
-        candidatesNs: IntArray,
-        name: String?,
-        binSize: Int,
-        fragmentationThresholdBp: Int = OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP,
-    ): Int {
-        val fragmentations = DoubleArray(candidatesNs.size) {
-            candidatesNs[it].toDouble() / candidatesNs[0]
+    fun estimateGap(candidatesNs: IntArray, ): Int {
+        val deltas = (0 until candidatesNs.size - 1).map {
+            (candidatesNs[it] - candidatesNs[it + 1] + 1.0) / (candidatesNs[it + 1] + 1)
         }
-        // Area above the curve
-        val fragmentationScore = (fragmentations.size - fragmentations.sum())
-        OmnipeakModelToPeaks.LOG.debug(
-            "${name ?: ""} Fragmentation $fragmentationScore"
-        )
-        if (fragmentationScore < fragmentationThresholdBp / binSize) {
-            OmnipeakModelToPeaks.LOG.info("${name ?: ""} No fragmentation detected!")
-            return 0
+        val maxDelta = (OMNIPEAK_DEFAULT_GAP + 1 until deltas.size).firstOrNull {
+            deltas[it] <= OMNIPEAK_GAP_MIN_DELTA
         }
-        val compensationGap = (fragmentationScore - fragmentationThresholdBp / binSize).toInt()
-        OmnipeakModelToPeaks.LOG.info("${name ?: ""} Fragmentation compensation gap: $compensationGap")
-        return compensationGap
+        return max((maxDelta?:0) + 1, OMNIPEAK_DEFAULT_GAP)
     }
 
 

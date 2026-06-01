@@ -66,7 +66,7 @@ object OmnipeakConstants {
     /**
      * The maximum number of iterations to perform during the fitting
      */
-    const val OMNIPEAK_DEFAULT_FIT_MAX_ITERATIONS = 20
+    const val OMNIPEAK_DEFAULT_FIT_MAX_ITERATIONS = 10
 
     /**
      * Number of points between relaxed and strict sensitivity to analyse
@@ -86,7 +86,7 @@ object OmnipeakConstants {
      */
     const val OMNIPEAK_SCORE_BLOCKS = 0.5
 
-    const val OMNIPEAK_DEFAULT_GAP = 0
+    const val OMNIPEAK_DEFAULT_GAP = 2
 
     val OMNIPEAK_DEFAULT_SENSITIVITY = ln(OMNIPEAK_DEFAULT_FDR)
 
@@ -94,9 +94,8 @@ object OmnipeakConstants {
     // i.e. reduction of candidate number when merging with gap
     const val OMNIPEAK_FRAGMENTATION_MAX_GAP_BP = 5000
 
-    // Rule of thumb: max when narrow marks and ATAC-seq data are not fragmented
-    // Fragmentation score is an area above the curve of relative candidates number by gap
-    const val OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP = 1000
+    // Minimal threshold when detecting effective gap (5%)
+    const val OMNIPEAK_GAP_MIN_DELTA = 0.05
 
     // When calling summits, min summit length x average single mode peak length
     const val OMNIPEAK_SUMMITS_MIN_LENGTH = 0.5

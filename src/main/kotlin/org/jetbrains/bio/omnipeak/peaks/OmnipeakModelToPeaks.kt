@@ -7,7 +7,6 @@ import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.omnipeak.coverage.BigWigBinnedCoverageQuery
-import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SCORE_BLOCKS
@@ -61,7 +60,6 @@ object OmnipeakModelToPeaks {
         sensitivityCmdArg: Double?,
         gapCmdArg: Int?,
         summits: Boolean,
-        fragmentationThreshold: Int,
         clip: Double,
         blackListPath: Path? = null,
         parallel: Boolean = true,
@@ -100,17 +98,17 @@ object OmnipeakModelToPeaks {
             gapCmdArg != null -> gapCmdArg
             summits -> 0
             else -> {
-                LOG.info("${name ?: ""} Analysing fragmentation...")
+                LOG.info("${name ?: ""} Analysing gap...")
                 val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize) {
                     estimateCandidatesNumberLens(
                         genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
                         sensitivity, it
                     ).n
                 }
-                estimateGap(candidateGapNs, name, fitInfo.binSize, fragmentationThreshold)
+                estimateGap(candidateGapNs)
             }
         }
-        LOG.info("${name ?: ""} Candidates selection with gap: $gap")
+        LOG.info("${name ?: ""} Selecting candidates with gap: $gap")
 
         val candidatesMap = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
             cancellableState?.checkCanceled()

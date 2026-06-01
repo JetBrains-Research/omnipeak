@@ -27,7 +27,8 @@ Features
 Citation
 --------
 
-<i>Oleg Shpynov, Maxim N Artyomov, Accurate chromatin marks peak calling with Omnipeak, Nucleic Acids Research, Volume 54, Issue 1, 13 January 2026, gkaf1454, https://doi.org/10.1093/nar/gkaf1454</i>
+<i>Oleg Shpynov, Maxim N Artyomov, Accurate chromatin marks peak calling with Omnipeak, Nucleic Acids Research, Volume
+54, Issue 1, 13 January 2026, gkaf1454, https://doi.org/10.1093/nar/gkaf1454</i>
 
 Requirements
 ------------
@@ -97,9 +98,8 @@ Command line options
 | `--hmm-snr SNR`                                 | Fraction of coverage to estimate and guard signal to noise ratio, `0` to disable constraint check.                                                                                                                                                                   |
 | `--hmm-low LOW`                                 | Minimal low state mean threshold, guards against too broad peaks, `0` to disable constraint check.                                                                                                                                                                   |
 | `--sensitivity SENSITIVITY`                     | Configures log PEP threshold sensitivity for candidates selection.<br>Automatically estimated from the data, or during semi-supervised peak calling.                                                                                                                 |
-| `--gap GAP`                                     | Configures minimal gap between peaks.<br>Generally, not required, but used in semi-supervised peak calling.                                                                                                                                                          |
+| `--gap GAP`                                     | Configures minimal gap between peaks.<br>Generally, not required, but used in semi-supervised peak calling. `0` when `--summits` is provided.                                                                                                                        |
 | `--multiple TEST`                               | Method applied for multiple hypothesis testing.<br/>`BH` for Benjamini-Hochberg, `BF` for Bonferroni.                                                                                                                                                                |
-| `--fragmentation FRAGMENTATION`                 | Fragmentation threshold in bp to apply compensation gap.<br>Fragmentation indicates how much less peaks we could obtain by increasing gap.<br>Not available when `gap` is explicitly provided.                                                                       |                  
 | `--clip CLIP_TRESHOLD`                          | Clip max threshold for fine-tune boundaries according to local signal, `0` to disable.<br>Disabled when processing BigWig files.                                                                                                                                     |
 | `--ext`                                         | Save extended states information to model file.<br>Required for model visualization in JBR Genome Browser.                                                                                                                                                           |
 | `--deep-analysis`                               | Deep analysis of model including analysis of coverage / candidates / peaks.                                                                                                                                                                                          |

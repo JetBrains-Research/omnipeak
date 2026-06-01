@@ -8,7 +8,6 @@ import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_MULTIPLE_TEST_CORRECTION
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.printConstants
 import org.jetbrains.bio.omnipeak.fit.OmnipeakDataPaths
@@ -161,7 +160,6 @@ object  OmnipeakCLACompare {
                         genomeQuery,
                         fdr, multipleTesting,
                         sensitivity, gap, false,
-                        OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP,
                         clip = clip,
                         blackListPath = blacklistPath,
                         name = peaksPath.fileName.stem

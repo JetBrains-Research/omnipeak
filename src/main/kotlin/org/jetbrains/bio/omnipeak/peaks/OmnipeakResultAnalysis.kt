@@ -49,7 +49,6 @@ object OmnipeakResultAnalysis {
         fdr: Double,
         sensitivityCmdArg: Double?,
         gapCmdArg: Int?,
-        fragmentationThreshold: Int,
         blackListPath: Path?,
         peaksList: List<Peak>,
         peaksPath: Path?
@@ -199,7 +198,7 @@ object OmnipeakResultAnalysis {
         }
         logInfo("Sensitivity2use: $sensitivity2use", infoWriter)
 
-        LOG.debug("$name Analysing fragmentation...")
+        LOG.debug("$name Analysing gap...")
         val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize) {
             estimateCandidatesNumberLens(
                 genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
@@ -209,7 +208,7 @@ object OmnipeakResultAnalysis {
         val gap2use = if (gapCmdArg != null) {
             gapCmdArg
         } else {
-            estimateGap(candidateGapNs, name, fitInfo.binSize, fragmentationThreshold)
+            estimateGap(candidateGapNs)
         }
 
         logInfo("Gap2use: $gap2use", infoWriter)

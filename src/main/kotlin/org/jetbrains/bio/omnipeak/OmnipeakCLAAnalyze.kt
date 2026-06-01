@@ -11,7 +11,6 @@ import org.jetbrains.bio.omnipeak.OmnipeakCLA.LOG
 import org.jetbrains.bio.omnipeak.OmnipeakCLA.checkGenomeInFitInformation
 import org.jetbrains.bio.omnipeak.coverage.BigWigCoverageWriter
 import org.jetbrains.bio.omnipeak.fit.*
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_ESTIMATE_SNR
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_MULTIPLE_TEST_CORRECTION
@@ -81,16 +80,6 @@ object OmnipeakCLAAnalyze {
                 .withRequiredArg()
                 .ofType(Double::class.java)
                 .defaultsTo(OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD)
-
-            accepts(
-                "fragmentation",
-                "Fragmentation threshold in bp to enable gap compensation"
-            )
-                .availableUnless("gap")
-                .availableUnless("summits")
-                .withRequiredArg()
-                .ofType(Int::class.java)
-                .defaultsTo(OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP)
 
             parse(params) { options ->
                 if ("quiet" in options) {
@@ -167,11 +156,6 @@ object OmnipeakCLAAnalyze {
                 val clip = options.valueOf("clip") as Double
                 val summits = "summits" in options
                 LOG.info("SUMMITS: $summits")
-                val fragmentation = when {
-                    summits || gap != null -> Int.MAX_VALUE
-                    options.has("fragmentation") -> options.valueOf("fragmentation") as Int
-                    else -> OMNIPEAK_DEFAULT_FRAGMENTATION_THRESHOLD_BP
-                }
 
                 if (peaksPath != null) {
                     LOG.info("FDR: $fdr")
@@ -180,9 +164,6 @@ object OmnipeakCLAAnalyze {
                     }
                     if (gap != null) {
                         LOG.info("GAP: $gap")
-                    }
-                    if (gap == null && fragmentation < Int.MAX_VALUE) {
-                        LOG.info("FRAGMENTATION MIN THRESHOLD: $fragmentation")
                     }
                     LOG.info("CLIP: $clip")
                     LOG.info("PEAKS: $peaksPath")
@@ -232,7 +213,6 @@ object OmnipeakCLAAnalyze {
                         OmnipeakModelToPeaks.getPeaks(
                             results, genomeQuery, fdr, multipleTesting,
                             sensitivity, gap, summits,
-                            fragmentation,
                             clip = clip,
                             blackListPath = blackListPath,
                             name = peaksPath.fileName.stem,
@@ -261,7 +241,6 @@ object OmnipeakCLAAnalyze {
                             genomeQuery,
                             fdr,
                             sensitivity, gap,
-                            fragmentation,
                             blackListPath,
                             peaksList,
                             peaksPath
