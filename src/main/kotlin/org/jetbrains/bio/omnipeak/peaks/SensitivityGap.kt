@@ -203,12 +203,12 @@ object SensitivityGap {
      * @param candidatesNs Numbers of candidates by gap to use for the gap estimation.
      * @return An integer representing the gap.
      */
-    fun estimateGap(candidatesNs: IntArray, ): Int {
+    fun estimateGap(candidatesNs: IntArray): Int {
         val deltas = (0 until candidatesNs.size - 1).map {
             (candidatesNs[it] - candidatesNs[it + 1] + 1.0) / (candidatesNs[it + 1] + 1)
         }
         val maxDelta = (OMNIPEAK_DEFAULT_GAP + 1 until deltas.size).firstOrNull {
-            deltas[it] <= OMNIPEAK_GAP_MIN_DELTA
+            deltas[it - 1] >= OMNIPEAK_GAP_MIN_DELTA && deltas[it] < OMNIPEAK_GAP_MIN_DELTA
         }
         return max((maxDelta?:0) + 1, OMNIPEAK_DEFAULT_GAP)
     }
