@@ -75,7 +75,7 @@ object OmnipeakCLAAnalyze {
 
             accepts(
                 "hmm-low",
-                "Minimal low state mean threshold, guards against too broad peaks, 0 to disable"
+                "Minimal low state mean threshold, guards against excessive noise, 0 to disable"
             )
                 .withRequiredArg()
                 .ofType(Double::class.java)

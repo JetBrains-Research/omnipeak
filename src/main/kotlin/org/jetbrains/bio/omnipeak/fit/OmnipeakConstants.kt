@@ -43,8 +43,8 @@ object OmnipeakConstants {
     // Fraction scores used for HMM noise estimation
     const val OMNIPEAK_HMM_ESTIMATE_LOW = 0.5
 
-    // Minimal low state mean threshold, guards against too broad peaks
-    const val OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD = 0.3
+    // Minimal low-state mean threshold, guards excessive noise, especially in low-quality data
+    const val OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD = 0.8
 
     // Technical threshold to limit mean to std, guards against artificial data without noise
     const val OMNIPEAK_HMM_MAX_MEAN_TO_STD = 5.0

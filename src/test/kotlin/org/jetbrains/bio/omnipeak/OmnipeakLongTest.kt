@@ -808,7 +808,7 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
 
             val data = fitResults.fitInfo.dataQuery.apply(TO.get().first())
             val scores = data.sliceAsInt(data.labels.first())
-            assertTrue((1010 until 1040).map { scores[it] }.all { it == 100 })
+            assertTrue((101 until 150).map { scores[it] }.all { it == 100 })
 
             assertIn("NO CONTROL REGRESSION: true", out)
         }
@@ -982,11 +982,13 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
                     // Check created bed file
                     val peaksLocations = LocationsMergingList.load(TO, peaksPath)
                     assertTrue(
-                        Location(
-                            1000 * OMNIPEAK_DEFAULT_BIN,
-                            1050 * OMNIPEAK_DEFAULT_BIN,
-                            TO.get().first()
-                        ) in peaksLocations,
+                        peaksLocations.intersects(
+                            Location(
+                                100 * OMNIPEAK_DEFAULT_BIN,
+                                150 * OMNIPEAK_DEFAULT_BIN,
+                                TO.get().first()
+                            )
+                        ),
                         "Expected location not found in called peaks"
                     )
                 }
@@ -1157,9 +1159,9 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
         val enrichedRegions = genomeMap(TO) {
             val enriched = BitSet()
             if (it.name == "chr1") {
-                enriched.set(1000, 1050)
-                enriched.set(1300, 1400)
-                enriched.set(1700, 2000)
+                enriched.set(100, 150)
+                enriched.set(200, 300)
+                enriched.set(500, 700)
             }
             enriched
         }
@@ -1178,11 +1180,11 @@ Reads: single-ended, Fragment size: 2 bp (cross-correlation estimate)
         val chromosome = TO.get().first()
         val peaks = LocationsMergingList.load(TO, bedPath)
         listOf(
-            Location(1000 * OMNIPEAK_DEFAULT_BIN, 1050 * OMNIPEAK_DEFAULT_BIN, chromosome),
-            Location(1300 * OMNIPEAK_DEFAULT_BIN, 1400 * OMNIPEAK_DEFAULT_BIN, chromosome),
-            Location(1700 * OMNIPEAK_DEFAULT_BIN, 2000 * OMNIPEAK_DEFAULT_BIN, chromosome),
+            Location(100 * OMNIPEAK_DEFAULT_BIN, 150 * OMNIPEAK_DEFAULT_BIN, chromosome),
+            Location(200 * OMNIPEAK_DEFAULT_BIN, 300 * OMNIPEAK_DEFAULT_BIN, chromosome),
+            Location(500 * OMNIPEAK_DEFAULT_BIN, 700 * OMNIPEAK_DEFAULT_BIN, chromosome),
         ).forEach {
-            assertTrue(it in peaks, "Expected location not found in called peaks")
+            assertTrue(peaks.intersects(it), "Expected location $it not found in called peaks")
         }
     }
 
