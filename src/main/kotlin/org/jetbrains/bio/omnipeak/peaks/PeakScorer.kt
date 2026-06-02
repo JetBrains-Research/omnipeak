@@ -9,43 +9,53 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.peaks.Signal.estimateGenomeSignalNoiseAverage
 import org.jetbrains.bio.omnipeak.statistics.util.PoissonUtil
 import org.jetbrains.bio.viktor.F64Array
-import kotlin.math.abs
 import kotlin.math.ceil
-import kotlin.math.sqrt
 
 class PeakScorer(
     val modelScoreComputable: (ChromosomeRange) -> Double,
     val coverageControlComputable: ((ChromosomeRange) -> Pair<Double, Double>)?,
     val coverageComputable: ((ChromosomeRange) -> Double)?,
+    val binSize: Int,
     var avgNoiseDensity: Double? = null
 ) {
-    fun logPValue(cr: ChromosomeRange): Double {
-        // Model posterior log error probability for block
-        val modelLogPs = modelScoreComputable(cr)
-        when {
+    /**
+     * Whether [logP] yields genuine p-values rather than model posterior
+     * error probabilities (PEPs).
+     *
+     * A Poisson enrichment term is available (against control or estimated noise
+     * background) exactly when a coverage source is present.
+     * Without it, the only evidence is the model PEP, which is not a p-value and
+     * must be handled by a PEP-based FDR procedure
+     * (see [org.jetbrains.bio.statistics.hypothesis.Fdr.qvalidatePEPs]).
+     */
+    val producesPValues: Boolean
+        get() = coverageControlComputable != null || avgNoiseDensity != null
+
+    /**
+     * @return logPValue or logPEP
+     */
+    fun logP(cr: ChromosomeRange): Double {
+        return when {
             coverageControlComputable != null -> {
                 val (score, controlScore) = coverageControlComputable(cr)
-                // Combine both model and signal estimations
-                val logPoissonCdf = PoissonUtil.logPoissonCdf(
-                    ceil(score).toInt() + 1, controlScore + 1
-                )
-                return -sqrt(abs(modelLogPs * logPoissonCdf))
+                // Evidence vs. control
+                PoissonUtil.logPoissonCdf(ceil(score).toInt() + 1, controlScore + 1)
             }
-
             avgNoiseDensity != null -> {
                 checkNotNull(coverageComputable)
                 val score = coverageComputable(cr)
-                // Combine both model and signal estimations
-                val logPoissonCdf = PoissonUtil.logPoissonCdf(
+                PoissonUtil.logPoissonCdf(
+                    // Evidence vs. background noise
                     ceil(score).toInt() + 1, avgNoiseDensity!! * (cr.endOffset - cr.startOffset) + 1
                 )
-                return -sqrt(abs(modelLogPs * logPoissonCdf))
             }
-
             else ->
-                // Fallback
-                return modelLogPs
-
+                // Model evidence: mean log PEP over the block's bins
+                if (cr.endOffset / binSize > cr.startOffset / binSize)
+                    modelScoreComputable(cr)
+                else
+                   // No evidence available -> p-value 1 (log 0).
+                    1.0
         }
     }
 
@@ -103,14 +113,20 @@ class PeakScorer(
                 null
             val modelScoreComputable = { cr: ChromosomeRange ->
                 val logNullMemberships = logNullMembershipsMap[cr.chromosome]
-                (cr.startOffset / fitInfo.binSize until cr.endOffset / fitInfo.binSize).sumOf {
-                    logNullMemberships[it]
-                }
+                val startBin = cr.startOffset / fitInfo.binSize
+                val endBin = cr.endOffset / fitInfo.binSize
+                // Mean log PEP over the block's bins (length-normalized so that it is
+                // comparable across blocks of different sizes); 0.0 for sub-bin blocks.
+                if (endBin > startBin)
+                    (startBin until endBin).sumOf { logNullMemberships[it] } / (endBin - startBin)
+                else
+                    0.0
             }
             return PeakScorer(
                 modelScoreComputable,
                 coverageControlComputable,
                 coverageComputable,
+                fitInfo.binSize,
             )
         }
     }

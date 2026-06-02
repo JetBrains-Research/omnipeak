@@ -19,7 +19,9 @@ import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberL
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateSensitivity
 import org.jetbrains.bio.omnipeak.peaks.Signal.clipPeakBySignal
+import org.jetbrains.bio.omnipeak.statistics.util.FisherCombine
 import org.jetbrains.bio.statistics.f64Array
+import org.jetbrains.bio.statistics.hypothesis.BenjaminiHochberg
 import org.jetbrains.bio.statistics.hypothesis.Fdr
 import org.jetbrains.bio.util.CancellableState
 import org.jetbrains.bio.util.await
@@ -272,12 +274,22 @@ object OmnipeakModelToPeaks {
                 for (i in start until end) genomeLogPVals[i] = chrLogPVals[i - start]
             }
 
-            // Adjust globally log pValues -> log qValues
-            LOG.info("${name ?: ""} Adjusting pvalues ${testing.description}, N=${genomeLogPVals.length}")
-            val genomeLogQVals = if (testing == MultipleTesting.BH)
-                Fdr.qvalidate(genomeLogPVals, logResults = true)
-            else
-                F64Array(genomeLogPVals.length) { genomeLogPVals[it] + ln(genomeLogPVals.length.toDouble()) }
+            // Adjust globally log pValues -> log qValues.
+            // Without a coverage source there are no genuine p-values, only model posterior
+            // error probabilities (PEPs); estimate FDR by averaging PEPs (Fdr.qvalidate)
+            // rather than applying Benjamini-Hochberg / Bonferroni, which require p-values.
+            val adjustmentDescription = if (!peakScorer.producesPValues) "averaged PEP" else testing.description
+            LOG.info("${name ?: ""} Adjusting pvalues $adjustmentDescription, N=${genomeLogPVals.length}")
+            val genomeLogQVals = when {
+                !peakScorer.producesPValues ->
+                    Fdr.qvalidatePEPs(genomeLogPVals, logResults = true)
+
+                testing == MultipleTesting.BH ->
+                    BenjaminiHochberg.adjustLogPValues(genomeLogPVals, logResults = true)
+
+                else ->
+                    F64Array(genomeLogPVals.length) { genomeLogPVals[it] + ln(genomeLogPVals.length.toDouble()) }
+            }
 
             // Collect peaks together from all chromosomes
             // Utilizing block scores allow for:
@@ -501,11 +513,17 @@ object OmnipeakModelToPeaks {
             cancellableState?.checkCanceled()
             val blocks = candidateCoordinates[idx].blocks
             val blocksLogPs = blocks.map { (blockStart, blockEnd) ->
-                val logPValue = peakScorer.logPValue(ChromosomeRange(blockStart, blockEnd, chromosome))
+                val logPValue = peakScorer.logP(ChromosomeRange(blockStart, blockEnd, chromosome))
                 check(!logPValue.isNaN()) { "P-value is nan" }
-                return@map logPValue
+                logPValue
             }
-            return@F64Array lengthWeightedScores(blocks, blocksLogPs)
+            return@F64Array if (peakScorer.producesPValues)
+                // Genuine p-values: combine blocks into a single candidate p-value with Fisher's method.
+                FisherCombine.logFisherCombinedP(blocksLogPs.toDoubleArray())
+            else
+                // Model posterior error probabilities: length-weighted average,
+                // consistent with the PEP-based FDR (Fdr.qvalidate) applied downstream.
+                lengthWeightedScores(blocks, blocksLogPs)
         }
     }
 
