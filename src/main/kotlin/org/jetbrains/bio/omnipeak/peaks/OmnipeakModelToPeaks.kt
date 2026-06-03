@@ -19,7 +19,6 @@ import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberL
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateSensitivity
 import org.jetbrains.bio.omnipeak.peaks.Signal.clipPeakBySignal
-import org.jetbrains.bio.omnipeak.statistics.util.FisherCombine
 import org.jetbrains.bio.statistics.f64Array
 import org.jetbrains.bio.statistics.hypothesis.BenjaminiHochberg
 import org.jetbrains.bio.statistics.hypothesis.Fdr
@@ -88,9 +87,12 @@ object OmnipeakModelToPeaks {
         val sensitivity = if (sensitivityCmdArg != null) {
             sensitivityCmdArg
         } else {
-            estimateSensitivity(
-                genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
-                parallel, name, cancellableState
+            min(
+                ln(fdr),
+                estimateSensitivity(
+                    genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
+                    parallel, name, cancellableState
+                )
             )
         }
         LOG.info("${name ?: ""} Selecting candidates with sensitivity: $sensitivity")
@@ -279,7 +281,7 @@ object OmnipeakModelToPeaks {
             // error probabilities (PEPs); estimate FDR by averaging PEPs (Fdr.qvalidate)
             // rather than applying Benjamini-Hochberg / Bonferroni, which require p-values.
             val adjustmentDescription = if (!peakScorer.producesPValues) "averaged PEP" else testing.description
-            LOG.info("${name ?: ""} Adjusting pvalues $adjustmentDescription, N=${genomeLogPVals.length}")
+            LOG.info("${name ?: ""} Adjusting $adjustmentDescription, N=${genomeLogPVals.length}")
             val genomeLogQVals = when {
                 !peakScorer.producesPValues ->
                     Fdr.qvalidatePEPs(genomeLogPVals, logResults = true)
@@ -517,13 +519,7 @@ object OmnipeakModelToPeaks {
                 check(!logPValue.isNaN()) { "P-value is nan" }
                 logPValue
             }
-            return@F64Array if (peakScorer.producesPValues)
-                // Genuine p-values: combine blocks into a single candidate p-value with Fisher's method.
-                FisherCombine.logFisherCombinedP(blocksLogPs.toDoubleArray())
-            else
-                // Model posterior error probabilities: length-weighted average,
-                // consistent with the PEP-based FDR (Fdr.qvalidate) applied downstream.
-                lengthWeightedScores(blocks, blocksLogPs)
+            return@F64Array lengthWeightedScores(blocks, blocksLogPs)
         }
     }
 

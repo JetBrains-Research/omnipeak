@@ -9,7 +9,9 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.peaks.Signal.estimateGenomeSignalNoiseAverage
 import org.jetbrains.bio.omnipeak.statistics.util.PoissonUtil
 import org.jetbrains.bio.viktor.F64Array
+import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.pow
 
 class PeakScorer(
     val modelScoreComputable: (ChromosomeRange) -> Double,
@@ -19,44 +21,41 @@ class PeakScorer(
     var avgNoiseDensity: Double? = null
 ) {
     /**
-     * Whether [logP] yields genuine p-values rather than model posterior
-     * error probabilities (PEPs).
-     *
-     * A Poisson enrichment term is available (against control or estimated noise
-     * background) exactly when a coverage source is present.
-     * Without it, the only evidence is the model PEP, which is not a p-value and
-     * must be handled by a PEP-based FDR procedure
-     * (see [org.jetbrains.bio.statistics.hypothesis.Fdr.qvalidatePEPs]).
+     * Whether [logP] yields p-values rather than model posterior error probabilities (PEPs).
      */
     val producesPValues: Boolean
-        get() = coverageControlComputable != null || avgNoiseDensity != null
+        get() = (coverageControlComputable != null || avgNoiseDensity != null)
 
     /**
      * @return logPValue or logPEP
      */
     fun logP(cr: ChromosomeRange): Double {
-        return when {
-            coverageControlComputable != null -> {
-                val (score, controlScore) = coverageControlComputable(cr)
+        val logPs = ArrayList<Double>()
+        if (coverageControlComputable != null) {
+            val (score, controlScore) = coverageControlComputable(cr)
+            logPs.add(
                 // Evidence vs. control
                 PoissonUtil.logPoissonCdf(ceil(score).toInt() + 1, controlScore + 1)
-            }
-            avgNoiseDensity != null -> {
-                checkNotNull(coverageComputable)
-                val score = coverageComputable(cr)
+            )
+        }
+
+        if (avgNoiseDensity != null) {
+            checkNotNull(coverageComputable)
+            val score = coverageComputable(cr)
+            logPs.add(
                 PoissonUtil.logPoissonCdf(
                     // Evidence vs. background noise
                     ceil(score).toInt() + 1, avgNoiseDensity!! * (cr.endOffset - cr.startOffset) + 1
                 )
-            }
-            else ->
-                // Model evidence: mean log PEP over the block's bins
-                if (cr.endOffset / binSize > cr.startOffset / binSize)
-                    modelScoreComputable(cr)
-                else
-                   // No evidence available -> p-value 1 (log 0).
-                    1.0
+            )
         }
+
+        // Model PEP over the block's bins
+        logPs.add(modelScoreComputable(cr))
+
+        // Cannot apply FisherCombine here because of dependency between p-values
+        // FisherCombine inflates two or more significant pvalues
+        return -logPs.fold(1.0) { acc, v -> acc * abs(v) }.pow(1.0 / logPs.size.toDouble())
     }
 
     fun valueScore(cr: ChromosomeRange): Double {

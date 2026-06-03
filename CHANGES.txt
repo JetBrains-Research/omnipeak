@@ -6,13 +6,13 @@ Here you can see the full list of changes between each release.
 Version 1.4
 --------------------
 
-Released on Jun 2nd, 2026
+Released on Jun 3rd, 2026
 
-- Reworked peaks significance estimation using Fisher method for combining pvalues
 - Reworked gap estimation as a convergence point of the candidates' number while increasing gap
 - Filter out summits by significance
 - Clean up .npz coverage files when no `--keep-cache` is set
 - Fixed `--bigwig` output after .npz coverage cache cleanup
+- Reworked peaks significance estimation when PEPs only are available
 
 
 Version 1.3
