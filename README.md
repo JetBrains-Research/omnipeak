@@ -105,6 +105,13 @@ Command line options
 | `--deep-analysis`                               | Deep analysis of model including analysis of coverage / candidates / peaks.                                                                                                                                                                                          |
 | `--keep-cache`                                  | Keep cache files. By default OmniPeak creates cache files in working directory and cleans up.                                                                                                                                                                        |
 
+Parameters that mostly influence peak calling results:
+* `--hmm-low LOW` Guards again noise, can limit sensitivity of the HMM
+* `-kd, --keep-duplicates` May significantly influence the signal-to-noise ratio in the data
+* `-f, --fdr FDR` Naturally filters detected peaks by significance
+* `--gap GAP` Gap is determined automatically, however, can be adjusted to merge adjacent peaks
+
+
 Build from sources
 ------------------
 
