@@ -210,7 +210,11 @@ object SensitivityGap {
         val maxDelta = (OMNIPEAK_DEFAULT_GAP + 1 until deltas.size).firstOrNull {
             deltas[it - 1] >= OMNIPEAK_GAP_MIN_DELTA && deltas[it] < OMNIPEAK_GAP_MIN_DELTA
         }
-        return max((maxDelta?:0) + 1, OMNIPEAK_DEFAULT_GAP)
+        return when {
+            maxDelta != null -> maxDelta
+            deltas.last() >= OMNIPEAK_GAP_MIN_DELTA -> deltas.size
+            else -> OMNIPEAK_DEFAULT_GAP
+        }
     }
 
 
