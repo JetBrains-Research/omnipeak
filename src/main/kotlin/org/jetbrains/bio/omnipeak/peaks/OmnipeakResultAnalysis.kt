@@ -139,10 +139,10 @@ object OmnipeakResultAnalysis {
 
             if (treatmentCoverage is SingleEndCoverage) {
                 LOG.debug("$name Analysing fragment size cross-correlation...")
-                fragmentSizeCorrelations = FragmentSize.computePearsonCorrelationTransform(
+                fragmentSizeCorrelations = FragmentSize.computeCrossCorrelation(
                     (0..FragmentSize.MAX_FRAGMENT_SIZE).toList(),
                     treatmentCoverage.data
-                ).map { it.pearsonTransform }.toDoubleArray()
+                ).map { it.value }.toDoubleArray()
                 detectedFragment = treatmentCoverage.detectedFragment
                 logInfo("Detected fragment size: $detectedFragment", infoWriter)
             } else if (treatmentCoverage is PairedEndCoverage) {
