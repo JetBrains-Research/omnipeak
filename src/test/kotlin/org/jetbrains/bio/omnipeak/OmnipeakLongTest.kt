@@ -433,6 +433,51 @@ PEAKS: $peaksPath
 
 
     @Test
+    fun testFilesCreatedByAnalyzeDeepAnalysis() {
+        withTempDirectory("work") { dir ->
+            withTempFile("track", ".bed.gz", dir) { path ->
+                withTempFile("control", ".bed.gz", dir) { control ->
+                    // NOTE[oshpynov] we use .bed.gz here for the ease of sampling result save
+                    sampleCoverage(path, TO, OMNIPEAK_DEFAULT_BIN, goodQuality = true)
+                    sampleCoverage(control, TO, OMNIPEAK_DEFAULT_BIN, goodQuality = false)
+
+                    val chromsizes = Genome["to1"].chromSizesPath.toString()
+                    val id = OmnipeakAnalyzeFitInformation.generateId(
+                        listOf(OmnipeakDataPaths(path, control)),
+                        AutoFragment,
+                        OMNIPEAK_DEFAULT_BIN,
+                        unique = true, regressControl = true
+                    )
+                    val peaksPath = dir / "${id}.bed"
+                    OmnipeakCLA.main(
+                        arrayOf(
+                            "analyze",
+                            "-cs", chromsizes,
+                            "--workdir", dir.toString(),
+                            "-t", path.toString(),
+                            "-c", control.toString(),
+                            "--threads", THREADS.toString(),
+                            "--peaks", peaksPath.toString(),
+                            "--deep-analysis"
+                        )
+                    )
+
+                    // Model test (should not be saved when --peaks is provided without --keep-cache)
+                    assertEquals(0, Configuration.experimentsPath.glob("${id}*.omni").size)
+                    // Log file
+                    assertEquals(1, Configuration.logsPath.glob("${id}*.log").size)
+                    // Genome Coverage test
+                    assertEquals(0, Configuration.cachesPath.glob("coverage_${path.stemGz}_unique#*.npz").size)
+                    assertEquals(0, Configuration.cachesPath.glob("coverage_${control.stemGz}_unique#*.npz").size)
+                    // Peaks test
+                    assertTrue(peaksPath.exists)
+                }
+            }
+        }
+    }
+
+
+    @Test
     fun testCustomModelPath() {
         withTempDirectory("work") { dir ->
             withTempFile("track", ".bed.gz", dir) { path ->
