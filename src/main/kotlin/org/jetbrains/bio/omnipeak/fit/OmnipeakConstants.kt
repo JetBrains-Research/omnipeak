@@ -55,7 +55,8 @@ object OmnipeakConstants {
     val OMNIPEAK_HMM_TRANSITIONS = listOf(
         doubleArrayOf(0.75, 0.2499, 0.0001),
         doubleArrayOf(0.2, 0.798, 0.002),
-        doubleArrayOf(0.005, 0.015, 0.98))
+        doubleArrayOf(0.005, 0.015, 0.98)
+    )
 
     /**
      * The threshold  used in the Omnipeak peak-fitting algorithm,

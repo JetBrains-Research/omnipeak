@@ -8,11 +8,13 @@ import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.coverage.Coverage
+import org.jetbrains.bio.genome.coverage.FragmentSize
+import org.jetbrains.bio.genome.coverage.PairedEndCoverage
+import org.jetbrains.bio.genome.coverage.SingleEndCoverage
 import org.jetbrains.bio.omnipeak.OmnipeakCLA
 import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
-import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.AutoCorrelations.computeAutoCorrelations
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.estimateSingleModeLength
@@ -30,8 +32,15 @@ import org.jetbrains.bio.util.deleteIfExists
 import org.jetbrains.bio.util.stem
 import org.jetbrains.bio.util.toPath
 import org.jetbrains.bio.viktor.F64Array
+import org.knowm.xchart.BitmapEncoder
+import org.knowm.xchart.XYChartBuilder
+import org.knowm.xchart.XYSeries
+import org.knowm.xchart.style.Styler
+import org.knowm.xchart.style.markers.SeriesMarkers
+import org.knowm.xchart.style.theme.GGPlot2Theme
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.awt.Color
 import java.io.BufferedWriter
 import java.io.FileWriter
 import java.nio.file.Path
@@ -90,6 +99,10 @@ object OmnipeakResultAnalysis {
 
         LOG.info("$name Analysing auto correlations...")
         var coverage: DoubleArray
+        var coverageCorrelations: DoubleArray = DoubleArray(0)
+        var logNullPValsCorrelations: DoubleArray = DoubleArray(0)
+        var fragmentSizeCorrelations: DoubleArray? = null
+        var detectedFragment = -1
         val binnedQuery = fitInfo.binnedCoverageQueries!!.first()
         if (binnedQuery is NormalizedBinnedCoverageQuery) {
             val ncq = binnedQuery.ncq
@@ -120,20 +133,48 @@ object OmnipeakResultAnalysis {
                 genomeQuery, treatmentCoverage, controlCoverage, controlScale, beta, blackList
             )
             logInfo("Track normalized variance: ${"%.3f".format(normVariance)}", infoWriter)
+
+            LOG.debug("$name Analysing coverage autocorrelation...")
+            coverageCorrelations = computeAutoCorrelations(coverage)
+
+            if (treatmentCoverage is SingleEndCoverage) {
+                LOG.debug("$name Analysing fragment size cross-correlation...")
+                fragmentSizeCorrelations = FragmentSize.computePearsonCorrelationTransform(
+                    (0..FragmentSize.MAX_FRAGMENT_SIZE).toList(),
+                    treatmentCoverage.data
+                ).map { it.pearsonTransform }.toDoubleArray()
+                detectedFragment = treatmentCoverage.detectedFragment
+                logInfo("Detected fragment size: $detectedFragment", infoWriter)
+            } else if (treatmentCoverage is PairedEndCoverage) {
+                detectedFragment = treatmentCoverage.averageFragmentSize
+                logInfo("Average fragment size: $detectedFragment", infoWriter)
+            }
         } else {
             coverage = DoubleArray(genomeQuery.get().size) { 0.0 }
         }
-        logInfo("Coverage >0 %: ${(100.0 * coverage.count { it > 0 } / coverage.size).toInt()}", infoWriter)
-        coverage = coverage.filter { it > 0 }.toDoubleArray()
-        logInfo("Coverage >0 max: ${coverage.maxOrNull()}", infoWriter)
-        logInfo("Coverage >0 mean: ${coverage.average()}", infoWriter)
-        logInfo("Coverage >0 median: ${StatUtils.percentile(coverage, 50.0)}", infoWriter)
-        logInfo("Coverage >0 std: ${coverage.standardDeviation()}", infoWriter)
+        val positiveCoverage = coverage.filter { it > 0 }.toDoubleArray()
+        val positivePercentage = if (coverage.isNotEmpty()) (100.0 * positiveCoverage.size / coverage.size).toInt() else 0
+        val max = positiveCoverage.maxOrNull() ?: 0.0
+        val mean = if (positiveCoverage.isNotEmpty()) positiveCoverage.average() else 0.0
+        val median = if (positiveCoverage.isNotEmpty()) StatUtils.percentile(positiveCoverage, 50.0) else 0.0
+        val std = if (positiveCoverage.isNotEmpty()) positiveCoverage.standardDeviation() else 0.0
+        logInfo(
+            "Positive coverage distribution: coverage >0 %: $positivePercentage, " +
+                    "max: ${"%.3f".format(max)}, mean: ${"%.3f".format(mean)}, " +
+                    "median: ${"%.3f".format(median)}, std: ${"%.3f".format(std)}",
+            infoWriter
+        )
+        coverage = positiveCoverage
 
         LOG.info("$name Analysing log null pvalues distribution...")
         val logNullPvals = getLogNullPvals(genomeQuery, omnipeakFitResults, blackList)
         logInfo("LogNullPVals mean: ${logNullPvals.average()}", infoWriter)
         logInfo("LogNullPVals std: ${logNullPvals.standardDeviation()}", infoWriter)
+
+        LOG.debug("$name Analysing log null pvalues autocorrelation...")
+        logNullPValsCorrelations = computeAutoCorrelations(logNullPvals)
+        val avgAutoCorrelation = logNullPValsCorrelations.average()
+        logInfo("Average autocorrelation score: $avgAutoCorrelation", infoWriter)
 
         // Collect candidates from model
         val logNullMembershipsMap = genomeMap(genomeQuery, parallel = true) { chromosome ->
@@ -149,20 +190,24 @@ object OmnipeakResultAnalysis {
         }
 
         LOG.debug("$name Analysing autocorrelation...")
-        val coverageCorrelations = computeAutoCorrelations(coverage)
-        val logNullPValsCorrelations = computeAutoCorrelations(logNullPvals)
-        val avgAutoCorrelation = logNullPValsCorrelations.average()
-        logInfo("Average autocorrelation score: $avgAutoCorrelation", infoWriter)
+        // Already computed above
 
         LOG.info("$name Analysing sensitivity...")
-        val (sensitivities, candidatesLogNs, candidatesLogALs) =
+        val (sensitivities, candidatesNs, candidatesALs) =
             getSensitivitiesAndCandidatesCharacteristics(
                 genomeQuery,
                 omnipeakFitResults,
                 logNullMembershipsMap,
                 bitList2reuseMap
             )
-        val st = detectSensitivityTriangle(sensitivities, candidatesLogNs, candidatesLogALs)
+        val st = detectSensitivityTriangle(sensitivities, candidatesNs, candidatesALs)
+
+        LOG.info("$name Analysing additive candidates...")
+        val (totals, news) = analyzeAdditiveCandidates(
+            genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
+            sensitivities, true
+        )
+
         val sensitivity2use: Double
         when {
             sensitivityCmdArg != null ->
@@ -177,17 +222,11 @@ object OmnipeakResultAnalysis {
                 logInfo("Sensitivity beforeNoise: ${sensitivities[beforeNoise]}", infoWriter)
                 logInfo("Sensitivity beforeNoise index: $beforeNoise", infoWriter)
 
-                val sensitivitiesLimited =
-                    sensitivities.slice(st.beforeMerge until st.stable).toDoubleArray()
-                val (totals, news) = analyzeAdditiveCandidates(
-                    genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
-                    sensitivitiesLimited, true
-                )
-                val minAdditionalIdx = sensitivitiesLimited.indices
-                    .minByOrNull { news[it].toDouble() / totals[it].toDouble() }!!
-                val minAdditionalSensitivity = sensitivitiesLimited[minAdditionalIdx]
+                val minAdditionalIdx = (st.beforeMerge until st.stable)
+                    .minByOrNull { if (totals[it] == 0) 0.0 else news[it].toDouble() / totals[it].toDouble() }!!
+                val minAdditionalSensitivity = sensitivities[minAdditionalIdx]
                 logInfo("Minimal additional: $minAdditionalSensitivity", infoWriter)
-                logInfo("Minimal additional index: ${st.beforeMerge + minAdditionalIdx}", infoWriter)
+                logInfo("Minimal additional index: $minAdditionalIdx", infoWriter)
                 sensitivity2use = minAdditionalSensitivity
             }
 
@@ -252,14 +291,21 @@ object OmnipeakResultAnalysis {
 
         prepareAutocorrelationTsvFile(logNullPValsCorrelations, ".ac.pvals.tsv", peaksPath)
 
-        prepareFragmentationTsvFile(peaksPath, candidateGapNs)
+        prepareGapsFile(peaksPath, candidateGapNs)
 
         prepareSensitivitiesTsvFile(
             genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
             peaksPath, sensitivities
         )
 
-        prepareSegmentsTsvFile(genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap, sensitivities, peaksPath)
+        prepareDeepAnalysisPlots(
+            peaksPath, sensitivities, candidatesNs, candidatesALs, totals, news, st, sensitivity2use,
+            coverageCorrelations, logNullPValsCorrelations, fragmentSizeCorrelations, detectedFragment,
+            candidateGapNs, gap2use, coverage, positivePercentage
+        )
+
+        prepareSegmentsTsvFile(sensitivities, totals, news, peaksPath)
+        OmnipeakModelPlots.prepareModelPlots(peaksPath, omnipeakFitResults)
         LOG.info("$name Done analysis")
     }
 
@@ -334,7 +380,7 @@ object OmnipeakResultAnalysis {
         logNullPsWriter?.close()
     }
 
-    private fun prepareFragmentationTsvFile(
+    private fun prepareGapsFile(
         peaksPath: Path?,
         candidateGapNs: IntArray,
     ) {
@@ -404,19 +450,11 @@ object OmnipeakResultAnalysis {
     }
 
     private fun prepareSegmentsTsvFile(
-        genomeQuery: GenomeQuery,
-        omnipeakFitInformation: OmnipeakFitInformation,
-        logNullMembershipsMap: GenomeMap<F64Array>,
-        bitList2reuseMap: GenomeMap<BitList>,
         sensitivities: DoubleArray,
+        totals: IntArray,
+        news: IntArray,
         peaksPath: Path?,
     ) {
-        val (totals, news) =
-            analyzeAdditiveCandidates(
-                genomeQuery, omnipeakFitInformation, logNullMembershipsMap, bitList2reuseMap,
-                sensitivities, true
-            )
-
         LOG.info("Analysing segments...")
         val segmentsFile = if (peaksPath != null) "$peaksPath.segments.tsv" else null
         if (segmentsFile != null) {
@@ -441,6 +479,175 @@ object OmnipeakResultAnalysis {
             )
         }
         segmentsWriter?.close()
+    }
+
+    private fun prepareDeepAnalysisPlots(
+        peaksPath: Path?,
+        sensitivities: DoubleArray,
+        candidatesNs: IntArray,
+        candidatesALs: DoubleArray,
+        totals: IntArray,
+        news: IntArray,
+        st: SensitivityGap.PepInfo?,
+        sensitivity2use: Double,
+        coverageCorrelations: DoubleArray,
+        logNullPValsCorrelations: DoubleArray,
+        fragmentSizeCorrelations: DoubleArray?,
+        detectedFragment: Int,
+        candidateGapNs: IntArray,
+        gap2use: Int,
+        coverage: DoubleArray,
+        positivePercentage: Int
+    ) {
+        if (peaksPath == null) return
+        LOG.info("Plotting deep analysis plots...")
+
+        if (coverage.isNotEmpty()) {
+            val max = coverage.maxOrNull() ?: 0.0
+            val mean = coverage.average()
+            val median = StatUtils.percentile(coverage, 50.0)
+            val std = coverage.standardDeviation()
+
+            val title = "Positive coverage distribution: coverage >0 %: $positivePercentage, " +
+                    "max: ${"%.3f".format(max)}, mean: ${"%.3f".format(mean)}, " +
+                    "median: ${"%.3f".format(median)}, std: ${"%.3f".format(std)}"
+
+            val xData = DoubleArray(100) { (it + 1).toDouble() }
+            val yData = DoubleArray(100) { StatUtils.percentile(coverage, it + 1.0) }
+
+            savePlot(
+                peaksPath, "coverage_distribution", title,
+                "Percentile", "Coverage",
+                xData, yData, null, -1
+            )
+        }
+
+        val logNs = DoubleArray(candidatesNs.size) { ln1p(candidatesNs[it].toDouble()) }
+        val logALs = DoubleArray(candidatesALs.size) { ln1p(candidatesALs[it]) }
+        val newPercentages = DoubleArray(sensitivities.size) {
+            if (totals[it] == 0) 0.0 else news[it].toDouble() / totals[it] * 100.0
+        }
+
+        val pepRanks = DoubleArray(sensitivities.size) { (it + 1).toDouble() }
+        val estimatedIdx = sensitivities.indices.minByOrNull { abs(sensitivities[it] - sensitivity2use) } ?: -1
+
+        // 1) log Number of candidates vs log Average lengths
+        savePlot(
+            peaksPath, "logN_vs_logAL", "log Number of candidates vs log Average lengths",
+            "log(Number of candidates + 1)", "log(Average lengths + 1)",
+            logNs, logALs, st, estimatedIdx
+        )
+
+        // 2) PEP vs log number of candidates
+        savePlot(
+            peaksPath, "pep_vs_logN", "PEP rank vs log number of candidates",
+            "PEP rank", "log(Number of candidates + 1)",
+            pepRanks, logNs, st, estimatedIdx
+        )
+
+        // 3) PEP vs log average lengths
+        savePlot(
+            peaksPath, "pep_vs_logAL", "PEP rank vs log average lengths",
+            "PEP rank", "log(Average lengths + 1)",
+            pepRanks, logALs, st, estimatedIdx
+        )
+
+        // 4) PEP vs new candidates%
+        savePlot(
+            peaksPath, "pep_vs_new", "PEP rank vs new candidates%",
+            "PEP rank", "New candidates%",
+            pepRanks, newPercentages, st, estimatedIdx
+        )
+
+        // Also update the original sensitivity vs candidates plot with markers
+        val distances = DoubleArray(coverageCorrelations.size) { (it + 1).toDouble() }
+        savePlot(
+            peaksPath, "ac_coverage", "Autocorrelation: Coverage",
+            "Distance", "Correlation",
+            distances, coverageCorrelations, null, -1
+        )
+        savePlot(
+            peaksPath, "ac_pvals", "Autocorrelation: LogNullPVals",
+            "Distance", "Correlation",
+            distances, logNullPValsCorrelations, null, -1
+        )
+
+        if (fragmentSizeCorrelations != null) {
+            val fragments = DoubleArray(fragmentSizeCorrelations.size) { it.toDouble() }
+            savePlot(
+                peaksPath, "fragment_size", "Fragment Size Estimation",
+                "Fragment Size", "Cross-correlation",
+                fragments, fragmentSizeCorrelations, null, detectedFragment,
+                estimatedLabel = "Detected Fragment"
+            )
+        }
+
+        val gapNs = DoubleArray(candidateGapNs.size) { candidateGapNs[it].toDouble() }
+        val gaps = DoubleArray(candidateGapNs.size) { it.toDouble() }
+        savePlot(
+            peaksPath, "gap_candidates", "Gap Candidates Estimation",
+            "Gap", "Number of Candidates",
+            gaps, gapNs, null, gap2use,
+            estimatedLabel = "Estimated Gap"
+        )
+    }
+
+    private fun savePlot(
+        peaksPath: Path,
+        name: String,
+        title: String,
+        xTitle: String,
+        yTitle: String,
+        xData: DoubleArray,
+        yData: DoubleArray,
+        st: SensitivityGap.PepInfo?,
+        estimatedIdx: Int,
+        estimatedLabel: String = "Estimated PEP"
+    ) {
+        val plotFile = "$peaksPath.$name.png"
+        val chart = XYChartBuilder()
+            .width(800).height(600)
+            .title(title)
+            .xAxisTitle(xTitle)
+            .yAxisTitle(yTitle)
+            .build()
+        chart.styler.theme = GGPlot2Theme()
+        chart.styler.plotBackgroundColor = Color.WHITE
+        chart.styler.chartBackgroundColor = Color.WHITE
+        chart.styler.plotGridLinesColor = Color.LIGHT_GRAY
+        chart.styler.legendPosition = Styler.LegendPosition.InsideNE
+        chart.styler.defaultSeriesRenderStyle = XYSeries.XYSeriesRenderStyle.Line
+
+        val series = chart.addSeries("Data", xData, yData)
+        series.lineColor = Color.BLACK
+        series.markerColor = Color.BLACK
+        series.marker = SeriesMarkers.NONE
+
+        if (st != null) {
+            val triangleIndices = listOf(st.beforeMerge, st.stable, st.beforeNoise)
+            val tx = triangleIndices.map { xData[it] }.toDoubleArray()
+            val ty = triangleIndices.map { yData[it] }.toDoubleArray()
+            val series = chart.addSeries("Triangle PEPs", tx, ty)
+            series.xySeriesRenderStyle = XYSeries.XYSeriesRenderStyle.Scatter
+            series.marker = SeriesMarkers.TRIANGLE_UP
+            series.markerColor = Color.RED
+        }
+
+        if (estimatedIdx != -1 && estimatedIdx < xData.size) {
+            val ex = doubleArrayOf(xData[estimatedIdx])
+            val ey = doubleArrayOf(yData[estimatedIdx])
+            val series = chart.addSeries(estimatedLabel, ex, ey)
+            series.xySeriesRenderStyle = XYSeries.XYSeriesRenderStyle.Scatter
+            series.marker = SeriesMarkers.DIAMOND
+            series.markerColor = Color.BLUE
+        }
+
+        try {
+            BitmapEncoder.saveBitmapWithDPI(chart, plotFile, BitmapEncoder.BitmapFormat.PNG, 300)
+            LOG.info("See $plotFile")
+        } catch (e: Exception) {
+            LOG.error("Failed to save plot $plotFile", e)
+        }
     }
 
     private fun logInfo(msg: String, infoWriter: BufferedWriter?, useLog: Boolean = true) {

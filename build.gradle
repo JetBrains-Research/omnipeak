@@ -55,6 +55,7 @@ dependencies {
     implementation("net.sf.jopt-simple:jopt-simple:5.0.4")
     implementation("org.jetbrains.bio:viktor:2.0.0")
     implementation("org.jetbrains.bio:big:0.9.1")
+    implementation("org.knowm.xchart:xchart:3.8.5")
 
     implementation project(":bioinf-commons")
     testImplementation project(path: ":bioinf-commons", configuration: "testOutput")
