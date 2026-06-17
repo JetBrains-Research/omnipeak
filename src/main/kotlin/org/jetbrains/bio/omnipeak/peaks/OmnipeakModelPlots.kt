@@ -89,10 +89,11 @@ object OmnipeakModelPlots {
         val maxMean = means.toDoubleArray().maxOrNull() ?: 10.0
         val threshold = max(10, (maxMean * 3).toInt())
 
+        val title = "Model States Distributions"
         val chart = XYChartBuilder()
             .width(800)
             .height(600)
-            .title("Model States Distributions")
+            .title(title)
             .xAxisTitle("Counts")
             .yAxisTitle("Probability")
             .build()
@@ -103,6 +104,8 @@ object OmnipeakModelPlots {
         chart.styler.plotGridLinesColor = Color.LIGHT_GRAY
         chart.styler.legendPosition = Styler.LegendPosition.InsideNE
         chart.styler.defaultSeriesRenderStyle = XYSeries.XYSeriesRenderStyle.Line
+        chart.styler.xAxisDecimalPattern = "0"
+        chart.styler.yAxisDecimalPattern = "0.000"
 
         for (i in 0 until means.length) {
             val mean = means[i]
@@ -114,7 +117,7 @@ object OmnipeakModelPlots {
                 if (p.isNaN() || !p.isFinite()) 0.0 else p
             }
             val stateName = if (i < negBinStates.size) negBinStates[i] else "NB$i"
-            val seriesName = "$stateName (Mean=${"%.2f".format(mean)}, Failures=${"%.2f".format(failure)})"
+            val seriesName = "$stateName (Mean=${"%.3f".format(mean)}, Failures=${"%.3f".format(failure)})"
             val series = chart.addSeries(seriesName, xData, yData)
             series.marker = SeriesMarkers.NONE
         }
@@ -126,10 +129,11 @@ object OmnipeakModelPlots {
         val states = getStates(model)
         val priors = model.priorProbabilities
         
+        val title = "Initial Matrix (Priors)"
         val chart = HeatMapChartBuilder()
             .width(800)
             .height(600)
-            .title("Initial Matrix (Priors)")
+            .title(title)
             .xAxisTitle("")
             .yAxisTitle("State")
             .build()
@@ -159,10 +163,11 @@ object OmnipeakModelPlots {
         val states = getStates(model)
         val transitions = model.transitionProbabilities
 
+        val title = "Transition Matrix"
         val chart = HeatMapChartBuilder()
             .width(800)
             .height(600)
-            .title("Transition Matrix")
+            .title(title)
             .xAxisTitle("To State")
             .yAxisTitle("From State")
             .build()

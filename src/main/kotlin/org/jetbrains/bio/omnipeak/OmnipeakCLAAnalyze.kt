@@ -158,14 +158,14 @@ object OmnipeakCLAAnalyze {
                 LOG.info("SUMMITS: $summits")
 
                 if (peaksPath != null) {
-                    LOG.info("FDR: $fdr")
+                    LOG.info("FDR: ${"%.3f".format(fdr)}")
                     if (sensitivity != null) {
-                        LOG.info("SENSITIVITY: $sensitivity")
+                        LOG.info("SENSITIVITY: ${"%.3f".format(sensitivity)}")
                     }
                     if (gap != null) {
                         LOG.info("GAP: $gap")
                     }
-                    LOG.info("CLIP: $clip")
+                    LOG.info("CLIP: ${"%.3f".format(clip)}")
                     LOG.info("PEAKS: $peaksPath")
                 } else {
                     LOG.info("NO peaks path given, process model fitting only.")

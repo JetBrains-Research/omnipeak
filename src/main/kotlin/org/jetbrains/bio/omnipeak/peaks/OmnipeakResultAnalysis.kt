@@ -118,9 +118,9 @@ object OmnipeakResultAnalysis {
                     controlCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()
                 }
                 logInfo("Control coverage: $controlTotal", infoWriter)
-                logInfo("Control scale: $controlScale", infoWriter)
-                logInfo("Beta: $beta", infoWriter)
-                logInfo("Min control correlation: $minCorrelation", infoWriter)
+                logInfo("Control scale: ${"%.3f".format(controlScale)}", infoWriter)
+                logInfo("Beta: ${"%.3f".format(beta)}", infoWriter)
+                logInfo("Min control correlation: ${"%.3f".format(minCorrelation)}", infoWriter)
             }
             LOG.info("$name Analysing coverage distribution...")
             coverage = computeCoverageScores(
@@ -168,13 +168,13 @@ object OmnipeakResultAnalysis {
 
         LOG.info("$name Analysing log null pvalues distribution...")
         val logNullPvals = getLogNullPvals(genomeQuery, omnipeakFitResults, blackList)
-        logInfo("LogNullPVals mean: ${logNullPvals.average()}", infoWriter)
-        logInfo("LogNullPVals std: ${logNullPvals.standardDeviation()}", infoWriter)
+        logInfo("LogNullPVals mean: ${"%.3f".format(logNullPvals.average())}", infoWriter)
+        logInfo("LogNullPVals std: ${"%.3f".format(logNullPvals.standardDeviation())}", infoWriter)
 
         LOG.debug("$name Analysing log null pvalues autocorrelation...")
         logNullPValsCorrelations = computeAutoCorrelations(logNullPvals)
         val avgAutoCorrelation = logNullPValsCorrelations.average()
-        logInfo("Average autocorrelation score: $avgAutoCorrelation", infoWriter)
+        logInfo("Average autocorrelation score: ${"%.3f".format(avgAutoCorrelation)}", infoWriter)
 
         // Collect candidates from model
         val logNullMembershipsMap = genomeMap(genomeQuery, parallel = true) { chromosome ->
@@ -215,17 +215,17 @@ object OmnipeakResultAnalysis {
 
             st != null -> {
                 val (beforeMerge, stable, beforeNoise) = st
-                logInfo("Sensitivity beforeMerge: ${sensitivities[beforeMerge]}", infoWriter)
+                logInfo("Sensitivity beforeMerge: ${"%.3f".format(sensitivities[beforeMerge])}", infoWriter)
                 logInfo("Sensitivity beforeMerge index: $beforeMerge", infoWriter)
-                logInfo("Sensitivity stable: ${sensitivities[stable]}", infoWriter)
+                logInfo("Sensitivity stable: ${"%.3f".format(sensitivities[stable])}", infoWriter)
                 logInfo("Sensitivity stable index: $stable", infoWriter)
-                logInfo("Sensitivity beforeNoise: ${sensitivities[beforeNoise]}", infoWriter)
+                logInfo("Sensitivity beforeNoise: ${"%.3f".format(sensitivities[beforeNoise])}", infoWriter)
                 logInfo("Sensitivity beforeNoise index: $beforeNoise", infoWriter)
 
                 val minAdditionalIdx = (st.beforeMerge until st.stable)
                     .minByOrNull { if (totals[it] == 0) 0.0 else news[it].toDouble() / totals[it].toDouble() }!!
                 val minAdditionalSensitivity = sensitivities[minAdditionalIdx]
-                logInfo("Minimal additional: $minAdditionalSensitivity", infoWriter)
+                logInfo("Minimal additional: ${"%.3f".format(minAdditionalSensitivity)}", infoWriter)
                 logInfo("Minimal additional index: $minAdditionalIdx", infoWriter)
                 sensitivity2use = minAdditionalSensitivity
             }
@@ -235,7 +235,7 @@ object OmnipeakResultAnalysis {
                 sensitivity2use = ln(fdr)
             }
         }
-        logInfo("Sensitivity2use: $sensitivity2use", infoWriter)
+        logInfo("Sensitivity2use: ${"%.3f".format(sensitivity2use)}", infoWriter)
 
         LOG.debug("$name Analysing gap...")
         val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize) {
@@ -262,24 +262,24 @@ object OmnipeakResultAnalysis {
         }
 
         val avgModeLen = estimateSingleModeLength(genomeQuery, fitInfo, candidatesMap, true)
-        logInfo("Single model length: $avgModeLen", infoWriter)
+        logInfo("Single model length: ${"%.3f".format(avgModeLen.toDouble())}", infoWriter)
 
         val peakScorer = PeakScorer.create(fitInfo, logNullMembershipsMap)
 
         // Estimate signal and noise average signal by candidates
         val (avgSignalDensity, avgNoiseDensity) =
             peakScorer.analyzeSignalAndNoise(genomeQuery, fitInfo, candidatesMap, true)
-        logInfo("Candidates signal density: $avgSignalDensity", infoWriter)
-        logInfo("Candidates noise density: $avgNoiseDensity", infoWriter)
+        logInfo("Candidates signal density: ${"%.3f".format(avgSignalDensity ?: 0.0)}", infoWriter)
+        logInfo("Candidates noise density: ${"%.3f".format(avgNoiseDensity ?: 0.0)}", infoWriter)
         val signalToNoise = if (avgSignalDensity != null && avgNoiseDensity != null)
             avgSignalDensity / avgNoiseDensity else 0.0
-        logInfo("Coverage signal to noise: $signalToNoise", infoWriter)
+        logInfo("Coverage signal to noise: ${"%.3f".format(signalToNoise)}", infoWriter)
 
         if (peakScorer.coverageControlComputable != null) {
             val signalToControl = computeSignalToControlAverage(
                 genomeQuery, fitInfo, candidatesMap, peakScorer.coverageControlComputable, true
             )
-            logInfo("Coverage signal to control: $signalToControl", infoWriter)
+            logInfo("Coverage signal to control: ${"%.3f".format(signalToControl)}", infoWriter)
         }
         infoWriter?.close()
 
@@ -502,6 +502,7 @@ object OmnipeakResultAnalysis {
         if (peaksPath == null) return
         LOG.info("Plotting deep analysis plots...")
 
+        val pep = exp(sensitivity2use)
         if (coverage.isNotEmpty()) {
             val max = coverage.maxOrNull() ?: 0.0
             val mean = coverage.average()
@@ -530,33 +531,38 @@ object OmnipeakResultAnalysis {
 
         val pepRanks = DoubleArray(sensitivities.size) { (it + 1).toDouble() }
         val estimatedIdx = sensitivities.indices.minByOrNull { abs(sensitivities[it] - sensitivity2use) } ?: -1
+        val estimatedPEPLabel = "Estimated PEP: ${"%.3f".format(pep)}"
 
         // 1) log Number of candidates vs log Average lengths
         savePlot(
             peaksPath, "logN_vs_logAL", "log Number of candidates vs log Average lengths",
             "log(Number of candidates + 1)", "log(Average lengths + 1)",
-            logNs, logALs, st, estimatedIdx
+            logNs, logALs, st, estimatedIdx,
+            estimatedLabel = estimatedPEPLabel
         )
 
         // 2) PEP vs log number of candidates
         savePlot(
             peaksPath, "pep_vs_logN", "PEP rank vs log number of candidates",
             "PEP rank", "log(Number of candidates + 1)",
-            pepRanks, logNs, st, estimatedIdx
+            pepRanks, logNs, st, estimatedIdx,
+            estimatedLabel = estimatedPEPLabel
         )
 
         // 3) PEP vs log average lengths
         savePlot(
             peaksPath, "pep_vs_logAL", "PEP rank vs log average lengths",
             "PEP rank", "log(Average lengths + 1)",
-            pepRanks, logALs, st, estimatedIdx
+            pepRanks, logALs, st, estimatedIdx,
+            estimatedLabel = estimatedPEPLabel
         )
 
         // 4) PEP vs new candidates%
         savePlot(
             peaksPath, "pep_vs_new", "PEP rank vs new candidates%",
             "PEP rank", "New candidates%",
-            pepRanks, newPercentages, st, estimatedIdx
+            pepRanks, newPercentages, st, estimatedIdx,
+            estimatedLabel = estimatedPEPLabel
         )
 
         // Also update the original sensitivity vs candidates plot with markers
@@ -578,7 +584,7 @@ object OmnipeakResultAnalysis {
                 peaksPath, "fragment_size", "Fragment Size Estimation",
                 "Fragment Size", "Cross-correlation",
                 fragments, fragmentSizeCorrelations, null, detectedFragment,
-                estimatedLabel = "Detected Fragment"
+                estimatedLabel = "Estimated Fragment: $detectedFragment"
             )
         }
 
@@ -588,7 +594,7 @@ object OmnipeakResultAnalysis {
             peaksPath, "gap_candidates", "Gap Candidates Estimation",
             "Gap", "Number of Candidates",
             gaps, gapNs, null, gap2use,
-            estimatedLabel = "Estimated Gap"
+            estimatedLabel = "Estimated Gap: $gap2use"
         )
     }
 
@@ -617,6 +623,8 @@ object OmnipeakResultAnalysis {
         chart.styler.plotGridLinesColor = Color.LIGHT_GRAY
         chart.styler.legendPosition = Styler.LegendPosition.InsideNE
         chart.styler.defaultSeriesRenderStyle = XYSeries.XYSeriesRenderStyle.Line
+        chart.styler.xAxisDecimalPattern = if (xTitle in listOf("PEP rank", "Counts", "Gap", "Fragment Size", "Number of Candidates", "Percentile", "Distance")) "0" else "0.000"
+        chart.styler.yAxisDecimalPattern = if (yTitle in listOf("PEP rank", "Counts", "Gap", "Fragment Size", "Number of Candidates", "Percentile", "Distance")) "0" else "0.000"
 
         val series = chart.addSeries("Data", xData, yData)
         series.lineColor = Color.BLACK
