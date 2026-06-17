@@ -68,8 +68,27 @@ compare                         Differential peak calling
             System.err.println(HELP)
         } else {
             when (args[0]) {
-                ANALYZE -> OmnipeakCLAAnalyze.analyze(args.copyOfRange(1, args.size))
-                COMPARE -> OmnipeakCLACompare.compare(args.copyOfRange(1, args.size))
+                ANALYZE -> {
+                    val result = OmnipeakCLAAnalyze.analyze(args.copyOfRange(1, args.size))
+                    if (result != null) {
+                        val (fitInfo, modelAlreadyExists, keepCacheFiles) = result
+                        if (!modelAlreadyExists && !keepCacheFiles) {
+                            LOG.debug("Clean caches")
+                            fitInfo.cleanCaches()
+                        }
+                    }
+                }
+
+                COMPARE -> {
+                    val result = OmnipeakCLACompare.compare(args.copyOfRange(1, args.size))
+                    if (result != null) {
+                        val (fitInfo, keepCacheFiles) = result
+                        if (!keepCacheFiles) {
+                            LOG.debug("Clean caches")
+                            fitInfo.cleanCaches()
+                        }
+                    }
+                }
 
                 "-?", "-h", "--help" -> println(HELP)
                 "-v", "--version" -> println(version())

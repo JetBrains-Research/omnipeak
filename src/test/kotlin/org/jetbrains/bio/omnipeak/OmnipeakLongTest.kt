@@ -357,6 +357,13 @@ PEAKS: $peaksPath
                     sampleCoverage(control, TO, OMNIPEAK_DEFAULT_BIN, goodQuality = false)
 
                     val chromsizes = Genome["to1"].chromSizesPath.toString()
+                    val id = OmnipeakAnalyzeFitInformation.generateId(
+                        listOf(OmnipeakDataPaths(path, control)),
+                        AutoFragment,
+                        OMNIPEAK_DEFAULT_BIN,
+                        unique = true, regressControl = true
+                    )
+                    val peaksPath = dir / "${id}.bed"
                     OmnipeakCLA.main(
                         arrayOf(
                             "analyze",
@@ -365,22 +372,19 @@ PEAKS: $peaksPath
                             "-t", path.toString(),
                             "-c", control.toString(),
                             "--threads", THREADS.toString(),
+                            "--peaks", peaksPath.toString()
                         )
                     )
 
-                    // Model test
-                    val id = OmnipeakAnalyzeFitInformation.generateId(
-                        listOf(OmnipeakDataPaths(path, null)),
-                        AutoFragment,
-                        OMNIPEAK_DEFAULT_BIN,
-                        unique = true, regressControl = true
-                    )
+                    // Model test (should not be saved when --peaks is provided without --keep-cache)
                     assertEquals(0, Configuration.experimentsPath.glob("${id}*.omni").size)
                     // Log file
-                    assertEquals(0, Configuration.logsPath.glob("${id}*.log").size)
+                    assertEquals(1, Configuration.logsPath.glob("${id}*.log").size)
                     // Genome Coverage test
                     assertEquals(0, Configuration.cachesPath.glob("coverage_${path.stemGz}_unique#*.npz").size)
                     assertEquals(0, Configuration.cachesPath.glob("coverage_${control.stemGz}_unique#*.npz").size)
+                    // Peaks test
+                    assertTrue(peaksPath.exists)
                 }
             }
         }
@@ -561,7 +565,7 @@ PEAKS: $peaksPath
                     )
                 }
                 assertIn(
-                    "ERROR: At least one of the parameters is required: --peaks or --keep-cache.",
+                    "ERROR: At least one of the parameters is required: --peaks, --model or --keep-cache.",
                     invalidErr
                 )
             }

@@ -11,6 +11,7 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MA
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_MULTIPLE_TEST_CORRECTION
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.printConstants
 import org.jetbrains.bio.omnipeak.fit.OmnipeakDataPaths
+import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakDifferentialPeakCallingExperiment
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.MultipleTesting
@@ -22,7 +23,8 @@ import java.nio.file.Path
 
 object  OmnipeakCLACompare {
 
-    internal fun compare(params: Array<String>) {
+    internal fun compare(params: Array<String>): Pair<OmnipeakFitInformation, Boolean>? {
+        var compareResults: Pair<OmnipeakFitInformation, Boolean>? = null
         with(OmnipeakCLA.getOptionParser()) {
             acceptsAll(
                 listOf("t1", "treatment1"),
@@ -71,9 +73,10 @@ object  OmnipeakCLACompare {
                 OmnipeakCLA.checkMemory()
 
                 val peaksPath = options.valueOf("peaks") as Path?
+                val modelPath = options.valueOf("model") as Path?
                 val keepCacheFiles = "keep-cache" in options
-                checkOrFail(peaksPath != null || keepCacheFiles) {
-                    "At least one of the parameters is required: --peaks or --keep-cache."
+                checkOrFail(peaksPath != null || modelPath != null || keepCacheFiles) {
+                    "At least one of the parameters is required: --peaks, --model or --keep-cache."
                 }
 
                 val modelId = peaksPath?.stemGz ?:
@@ -168,13 +171,10 @@ object  OmnipeakCLACompare {
                     Peak.savePeaks(peaks.peaks, peaksPath, "diff_${peaksPath.fileName.stem}")
                     LOG.info("Saved result to $peaksPath")
                 }
-                if (!keepCacheFiles) {
-                    LOG.debug("Clean coverage caches")
-                    differentialPeakCallingResults.fitInfo.cleanCaches()
-                }
-
+                compareResults = differentialPeakCallingResults.fitInfo to keepCacheFiles
             }
         }
+        return compareResults
     }
 
 

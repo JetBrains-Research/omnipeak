@@ -27,7 +27,8 @@ import java.nio.file.Path
 
 object OmnipeakCLAAnalyze {
 
-    internal fun analyze(params: Array<String>) {
+    internal fun analyze(params: Array<String>): Triple<OmnipeakFitInformation, Boolean, Boolean>? {
+        var analyzeResults: Triple<OmnipeakFitInformation, Boolean, Boolean>? = null
         with(OmnipeakCLA.getOptionParser()) {
             acceptsAll(
                 listOf("t", "treatment"),
@@ -190,6 +191,7 @@ object OmnipeakCLAAnalyze {
                 // Finally get results
                 val (actualModelPath, results) = lazyResults.value
                 val fitInfo = results.fitInfo
+                analyzeResults = Triple(fitInfo, modelAlreadyExists, keepCacheFiles)
                 check(fitInfo is OmnipeakAnalyzeFitInformation) {
                     "Expected ${OmnipeakAnalyzeFitInformation::class.java.simpleName}, got ${fitInfo::class.java.name}"
                 }
@@ -247,12 +249,9 @@ object OmnipeakCLAAnalyze {
                         )
                     }
                 }
-                if (!modelAlreadyExists && !keepCacheFiles) {
-                    LOG.debug("Clean coverage caches")
-                    fitInfo.cleanCaches()
-                }
             }
         }
+        return analyzeResults
     }
 
     fun processBlackList(
