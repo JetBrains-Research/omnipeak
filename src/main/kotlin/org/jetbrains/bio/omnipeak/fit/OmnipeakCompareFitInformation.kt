@@ -102,8 +102,8 @@ data class OmnipeakCompareFitInformation(
      */
     override fun score(chromosomeRange: ChromosomeRange): Double {
         check(scoresAvailable()) { "Scores are not available!" }
-        return if (binnedCoverageQueries1!!.all { it.areCachesPresent() } &&
-            binnedCoverageQueries2!!.all { it.areCachesPresent() }) {
+        return if (binnedCoverageQueries1!!.all { it.areCachesPresent() || it.isLoaded() } &&
+            binnedCoverageQueries2!!.all { it.areCachesPresent() || it.isLoaded() }) {
             val score1 = binnedCoverageQueries1!!.sumOf { it.controlNormalizedScore(chromosomeRange) }
                 .toDouble() / binnedCoverageQueries1!!.size
             val score2 = binnedCoverageQueries2!!.sumOf { it.controlNormalizedScore(chromosomeRange) }

@@ -70,7 +70,7 @@ object OmnipeakResultAnalysis {
         check(fitInfo.binnedCoverageQueries != null) {
             "$name Please use prepareData before!"
         }
-        check(fitInfo.binnedCoverageQueries!!.all { it.areCachesPresent() }) {
+        check(fitInfo.binnedCoverageQueries!!.all { it.areCachesPresent() || it.isLoaded() }) {
             "$name Coverage information is not available"
         }
         val infoFile = if (peaksPath != null) "$peaksPath.txt" else null
@@ -111,12 +111,12 @@ object OmnipeakResultAnalysis {
         if (binnedQuery is NormalizedBinnedCoverageQuery) {
             val ncq = binnedQuery.ncq
             val (controlScale, beta, minCorrelation) = ncq.coveragesNormalizedInfo
-            val treatmentCoverage = ncq.treatmentReads.coverage()
+            val treatmentCoverage = ncq.treatmentReads.get()
             val treatmentTotal = genomeQuery.get().sumOf {
                 treatmentCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()
             }
             logInfo("Treatment coverage: $treatmentTotal", infoWriter)
-            val controlCoverage = ncq.controlReads?.coverage()
+            val controlCoverage = ncq.controlReads?.get()
             if (controlCoverage != null) {
                 val controlTotal = genomeQuery.get().sumOf {
                     controlCoverage.getBothStrandsCoverage(it.chromosomeRange).toLong()

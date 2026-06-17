@@ -83,6 +83,9 @@ class NormalizedCoverageQuery(
     fun areCachesPresent(): Boolean =
         treatmentReads.npzPath().isAccessible() && (controlReads?.npzPath()?.isAccessible() ?: true)
 
+    fun isLoaded(): Boolean =
+        treatmentReads.isCached() && (controlReads?.isCached() ?: true)
+
     /**
      * Cached value for treatment and control scales, see [analyzeCoverage]
      */

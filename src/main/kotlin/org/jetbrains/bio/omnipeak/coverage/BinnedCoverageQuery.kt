@@ -21,6 +21,8 @@ interface BinnedCoverageQuery : Query<Chromosome, IntArray> {
 
     fun areCachesPresent(): Boolean
 
+    fun isLoaded(): Boolean = false
+
     fun cleanCaches()
 
 

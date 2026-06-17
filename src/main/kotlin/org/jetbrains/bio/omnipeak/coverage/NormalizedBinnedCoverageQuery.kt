@@ -34,6 +34,9 @@ class NormalizedBinnedCoverageQuery(val ncq: NormalizedCoverageQuery, val binSiz
     override fun areCachesPresent(): Boolean =
         ncq.areCachesPresent()
 
+    override fun isLoaded(): Boolean =
+        ncq.isLoaded()
+
     override fun cleanCaches() =
         ncq.cleanCaches()
 

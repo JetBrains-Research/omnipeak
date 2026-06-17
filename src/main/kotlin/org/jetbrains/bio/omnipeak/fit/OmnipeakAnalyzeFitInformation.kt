@@ -171,7 +171,7 @@ data class OmnipeakAnalyzeFitInformation(
         when (binnedCoverageQueries!!.first()) {
             is NormalizedBinnedCoverageQuery -> {
                 val bncq = this.binnedCoverageQueries!! as List<NormalizedBinnedCoverageQuery>
-                if (!bncq.all { it.areCachesPresent() }) {
+                if (!bncq.all { it.areCachesPresent() || it.isLoaded() }) {
                     return null
                 }
 
@@ -207,7 +207,7 @@ data class OmnipeakAnalyzeFitInformation(
         when (val query = this.binnedCoverageQueries!!.first()) {
             is NormalizedBinnedCoverageQuery -> {
                 val bncq = this.binnedCoverageQueries!! as List<NormalizedBinnedCoverageQuery>
-                if (!bncq.all { it.areCachesPresent() }) {
+                if (!bncq.all { it.areCachesPresent() || it.isLoaded() }) {
                     return null
                 }
 

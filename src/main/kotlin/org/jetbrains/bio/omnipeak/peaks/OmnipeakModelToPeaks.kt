@@ -460,7 +460,7 @@ object OmnipeakModelToPeaks {
         // Disable clipping for bigwig queries since the precision itself is quite low
         val canEstimateScore = fitInfo is OmnipeakAnalyzeFitInformation &&
                 fitInfo.binnedCoverageQueries?.all {
-                    it !is BigWigBinnedCoverageQuery && it.areCachesPresent() } ?: false
+                    it !is BigWigBinnedCoverageQuery && (it.areCachesPresent() || it.isLoaded()) } ?: false
         return candidates.mapNotNull { (from, to) ->
             cancellableState?.checkCanceled()
             var start = offsets[from]
