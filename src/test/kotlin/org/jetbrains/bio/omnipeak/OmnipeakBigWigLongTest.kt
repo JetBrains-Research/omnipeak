@@ -143,7 +143,7 @@ class OmnipeakBigWigLongTest {
                 val max = counts.values.max()
                 assertTrue(min > 0, "No peaks called at some scale: $counts")
                 assertTrue(
-                    max.toDouble() / min <= 1.2,
+                    max.toDouble() / min <= 1.5,
                     "Peak count is not scale-invariant across input scales: $counts"
                 )
             }

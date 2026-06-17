@@ -14,6 +14,9 @@ import org.jetbrains.bio.genome.coverage.SingleEndCoverage
 import org.jetbrains.bio.omnipeak.OmnipeakCLA
 import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_GAP_CONVERGENCE_FRACTION
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_GAP_MIN_DELTA
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.AutoCorrelations.computeAutoCorrelations
@@ -22,6 +25,7 @@ import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getChromosomeCandid
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNullPvals
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNulls
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.analyzeAdditiveCandidates
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.computeGapDeltas
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.detectSensitivityTriangle
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberLens
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
@@ -594,6 +598,28 @@ object OmnipeakResultAnalysis {
             peaksPath, "gap_candidates", "Gap Candidates Estimation",
             "Gap", "Number of Candidates",
             gaps, gapNs, null, gap2use,
+            estimatedLabel = "Estimated Gap: $gap2use"
+        )
+
+        val deltas = computeGapDeltas(candidateGapNs)
+        val deltaGaps = DoubleArray(deltas.size) { it.toDouble() }
+        var gapDeltasTitle = "Gap Deltas Estimation"
+        if (deltas.size > 2) {
+            val peakIdx = (2 until deltas.size).maxByOrNull { deltas[it] }
+            if (peakIdx != null) {
+                val peak = deltas[peakIdx]
+                if (peak < OMNIPEAK_GAP_MIN_DELTA) {
+                    gapDeltasTitle += " peak (${"%.3f".format(peak)}) < $OMNIPEAK_GAP_MIN_DELTA threhold"
+                } else if (peak > 0) {
+                    val threshold = OMNIPEAK_GAP_CONVERGENCE_FRACTION * peak
+                    gapDeltasTitle += " (threshold = $OMNIPEAK_GAP_CONVERGENCE_FRACTION * ${"%.3f".format(peak)} = ${"%.3f".format(threshold)})"
+                }
+            }
+        }
+        savePlot(
+            peaksPath, "gap_deltas", gapDeltasTitle,
+            "Gap", "Gap Delta",
+            deltaGaps, deltas, null, gap2use,
             estimatedLabel = "Estimated Gap: $gap2use"
         )
     }

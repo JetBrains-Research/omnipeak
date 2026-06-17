@@ -87,7 +87,7 @@ object OmnipeakConstants {
      */
     const val OMNIPEAK_SCORE_BLOCKS = 0.5
 
-    const val OMNIPEAK_DEFAULT_GAP = 2
+    const val OMNIPEAK_DEFAULT_GAP = 0
 
     val OMNIPEAK_DEFAULT_SENSITIVITY = ln(OMNIPEAK_DEFAULT_FDR)
 
@@ -96,7 +96,13 @@ object OmnipeakConstants {
     const val OMNIPEAK_FRAGMENTATION_MAX_GAP_BP = 5000
 
     // Minimal threshold when detecting effective gap (5%)
+    // This threshold can be estimated after evaluation of the gap_candidates plot in
+    // --deep-analysis mode for multiple broad and narrow marks
     const val OMNIPEAK_GAP_MIN_DELTA = 0.05
+
+    // Convergence is reached when the per-step decline drops below this fraction of the peak decline rate
+    // This value should be large enough to return values ~2kbp merge in [EstimateGapTest] real data tests
+    const val OMNIPEAK_GAP_CONVERGENCE_FRACTION = 0.25
 
     // When calling summits, min summit length x average single mode peak length
     const val OMNIPEAK_SUMMITS_MIN_LENGTH = 0.5
@@ -129,10 +135,11 @@ object OmnipeakConstants {
 
     fun pp(value: Any?): String {
         return when (value) {
+            is Double -> "%.3f".format(value)
             is List<*> -> "[${value.joinToString(", ") { pp(it) }}]"
             is IntArray -> value.contentToString()
-            is DoubleArray -> value.contentToString()
-            is Array<*> -> value.contentDeepToString()
+            is DoubleArray -> "[${value.joinToString(", ") { "%.3f".format(it) }}]"
+            is Array<*> -> "[${value.joinToString(", ") { pp(it) }}]"
             else -> value.toString()
         }
     }
