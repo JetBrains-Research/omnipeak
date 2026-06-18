@@ -1,6 +1,5 @@
 package org.jetbrains.bio.omnipeak.peaks
 
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -8,8 +7,11 @@ import kotlin.test.assertTrue
 
 /**
  * Tests for [SensitivityGap.estimateGap] on real candidates-by-gap curves (the `*.peak.gaps.tsv`
- * diagnostics): narrow marks (H3K27ac) merge gently -> a small gap, broad marks (H3K36me3) fragment
- * heavily -> a large gap. The arrays below are the verbatim `CandidatesN` columns (gap 0..49).
+ * diagnostics): narrow marks (H3K27ac) merge gently (near-exponential decline) -> a small gap,
+ * broad marks (H3K36me3) fragment heavily (convex decline) -> a larger gap. The estimator is the
+ * log-space convexity of the curve, so it has no tunable threshold and covers the full diapason
+ * up to OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / binSize (~50 bins).
+ * The arrays below are the verbatim `CandidatesN` columns (gap 0..49).
  */
 class EstimateGapTest {
 
@@ -24,6 +26,11 @@ class EstimateGapTest {
         42898, 42295, 41698, 41150, 40596, 40128, 39622, 39108, 38690, 38221,
         37763, 37354, 36913, 36519, 36101, 35681, 35304, 34914, 34529, 34157
     )
+
+    private val od10K27acChr1 = intArrayOf(
+        1588, 1581, 1573, 1563, 1542, 1510, 1485, 1448, 1412, 1378, 1338, 1293, 1261, 1238,
+        1204, 1179, 1153, 1120, 1093, 1070, 1049, 1027, 1005, 986, 961, 939, 923, 899, 886,
+        872, 853, 847, 832, 821, 803, 789, 779, 769, 754, 745, 736, 724, 709, 699, 687, 678, 666, 654, 641, 633)
 
     /**
      * OD5 H3K27ac, narrow: very gentle ~1.5x decline.
@@ -76,23 +83,32 @@ class EstimateGapTest {
     )
 
     @Test
-    fun narrowMarksGetDefaultGap() {
-        assertEquals(OMNIPEAK_DEFAULT_GAP, estimateGap(od10K27ac), "OD10 H3K27ac")
-        assertEquals(OMNIPEAK_DEFAULT_GAP, estimateGap(od5K27ac), "OD5 H3K27ac")
+    fun narrowMarksGetSmallGap() {
+        // Near-exponential decline -> log-space convexity ~0 -> a small gap.
+        assertEquals(0, estimateGap(od10K27acChr1), "OD10 H3K27ac chr1")
+        assertEquals(1, estimateGap(od10K27ac), "OD10 H3K27ac")
+        assertEquals(0, estimateGap(od5K27ac), "OD5 H3K27ac")
     }
 
     @Test
-    fun broadMarksGetLargeGap() {
-        // The curves never decay to a small fraction of their initial rate within the examined range,
-        // so they get large gaps. OD1 converges late (41); OD4 and the bad-quality E065 never do (49).
-        assertEquals(12, estimateGap(od1K36me3), "OD1 H3K36me3")
-        assertEquals(20, estimateGap(od4K36me3), "OD4 H3K36me3")
-        assertEquals(16, estimateGap(e065K36me3), "E065 H3K36me3")
+    fun broadMarksGetLargerGap() {
+        assertEquals(17, estimateGap(od1K36me3), "OD1 H3K36me3")
+        assertEquals(10, estimateGap(od4K36me3), "OD4 H3K36me3")
+        assertEquals(13, estimateGap(e065K36me3), "E065 H3K36me3")
+    }
+
+    @Test
+    fun worstFragmentationGetsLargeGap() {
+        // Step function: many candidates at gap 0, but they all merge at gap 1.
+        val n = 50
+        val worst = IntArray(n) { if (it == 0) 10000 else 1 }
+        val gap = estimateGap(worst)
+        assertEquals(46, gap, "Worst case gap should be 49")
     }
 
     @Test
     fun narrowGapsAreSmallerThanBroadGaps() {
-        val narrow = listOf(od10K27ac, od5K27ac).maxOf { estimateGap(it) }
+        val narrow = listOf(od10K27acChr1, od10K27ac, od5K27ac).maxOf { estimateGap(it) }
         val broad = listOf(od1K36me3, od4K36me3, e065K36me3).minOf { estimateGap(it) }
         assertTrue(narrow < broad, "Narrow gap $narrow should be smaller than broad gap $broad")
     }

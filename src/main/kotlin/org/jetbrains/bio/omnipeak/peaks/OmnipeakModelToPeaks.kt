@@ -87,15 +87,12 @@ object OmnipeakModelToPeaks {
         val sensitivity = if (sensitivityCmdArg != null) {
             sensitivityCmdArg
         } else {
-            min(
-                ln(fdr),
-                estimateSensitivity(
-                    genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
-                    parallel, name, cancellableState
-                )
+            estimateSensitivity(
+                genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
+                parallel, name, cancellableState
             )
         }
-        LOG.info("${name ?: ""} Selecting candidates with sensitivity: $sensitivity")
+        LOG.info("${name ?: ""} " + "Selecting candidates with sensitivity: ${"%.3f".format(sensitivity)}")
 
         // Estimate gap
         val gap = when {
@@ -103,7 +100,7 @@ object OmnipeakModelToPeaks {
             summits -> 0
             else -> {
                 LOG.info("${name ?: ""} Analysing gap...")
-                val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize) {
+                val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize + 1) {
                     estimateCandidatesNumberLens(
                         genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
                         sensitivity, it
@@ -460,7 +457,8 @@ object OmnipeakModelToPeaks {
         // Disable clipping for bigwig queries since the precision itself is quite low
         val canEstimateScore = fitInfo is OmnipeakAnalyzeFitInformation &&
                 fitInfo.binnedCoverageQueries?.all {
-                    it !is BigWigBinnedCoverageQuery && (it.areCachesPresent() || it.isLoaded()) } ?: false
+                    it !is BigWigBinnedCoverageQuery && (it.areCachesPresent() || it.isLoaded())
+                } ?: false
         return candidates.mapNotNull { (from, to) ->
             cancellableState?.checkCanceled()
             var start = offsets[from]
@@ -479,7 +477,7 @@ object OmnipeakModelToPeaks {
                 if (summits)
                     listOf(Range(start, end))
                 else
-                    // Compute significant blocks within candidate
+                // Compute significant blocks within candidate
                     candidateScoreBlocks(logNullMemberships, from, to).mapNotNull { (blockFrom, blockTo) ->
                         val blockStart = max(offsets[blockFrom], start)
                         val blockEnd = min(if (blockTo < offsets.size) offsets[blockTo] else chromosome.length, end)

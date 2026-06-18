@@ -10,8 +10,7 @@ import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.containers.toRangeMergingList
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FDR
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_GAP_CONVERGENCE_FRACTION
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_GAP_MIN_DELTA
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MULTIPLIER
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_MIN_SENSITIVITY
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SENSITIVITY_N
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
@@ -198,50 +197,47 @@ object SensitivityGap {
         return maxI to maxArea
     }
 
-    /**
-     * Computes the relative per-step decline `delta[i] = (Ni - Ni+1) / Ni+1` (Laplace-smoothed by +1)
-     * as used in [estimateGap].
-     */
-    fun computeGapDeltas(candidatesNs: IntArray): DoubleArray {
-        return (0 until candidatesNs.size - 1).map {
-            (candidatesNs[it] - candidatesNs[it + 1] + 1.0) / (candidatesNs[0] + 1)
-        }.toDoubleArray()
-    }
 
     /**
-     * Estimates the convergence point of the number of candidates while increasing gap.
+     * Estimates the gap to merge fragmented candidates, gently compensating for low-quality
+     * broad marks without any tunable threshold.
      *
-     * The candidates-by-gap curve declines as adjacent candidates merge. We look at the relative
-     * per-step decline `delta[i] = (Ni - Ni+1) / Ni+1` (Laplace-smoothed by +1):
+     * As the merge gap grows, the number of candidates [candidatesNs] declines as adjacent
+     * candidates join. The *shape* of that decline in log space tells narrow from broad marks:
      *
-     * 1. If the curve never declines steeply - the peak per-step decline stays below
-     *    [OMNIPEAK_GAP_MIN_DELTA] - the mark merges gently (e.g. narrow H3K27ac) and there is no
-     *    fragmentation to undo, so the default small gap is used.
-     * 2. Otherwise, the curve converges once the decline decays to [OMNIPEAK_GAP_CONVERGENCE_FRACTION]
-     *    of its peak rate. We return the first gap past the peak where that happens. Comparing against
-     *    the peak rate (rather than an absolute threshold) avoids false convergence on curves that
-     *    decline gently but persistently and never actually flatten (e.g. bad-quality broad marks).
-     * 3. If the decline never decays to that fraction within the examined range, the curve never
-     *    converges and the largest examined gap is returned.
+     * - Narrow marks (e.g. H3K27ac) merge at a roughly constant relative rate, so `ln(N)` falls
+     *   almost linearly - a straight line on the log scale. There is little fragmentation to undo,
+     *   so the gap stays close to [OMNIPEAK_DEFAULT_GAP].
+     * - Broad marks (e.g. H3K36me3) fragment heavily: many candidates merge already at small gaps
+     *   and the merge rate decelerates, so `ln(N)` bows below the straight chord connecting its
+     *   ends. The more pronounced that convexity, the larger the gap.
+     *
+     * The gap is that log-space convexity - the area between the chord and the `ln(N)` curve,
+     * normalized by the total log decline. A pure exponential decline (narrow) yields ~0 by
+     * construction, while the measure grows naturally with fragmentation (broad). No magic
+     * threshold is involved, and the value is bounded by the examined window.
+     *
+     * Additional multiplier [OMNIPEAK_FRAGMENTATION_MULTIPLIER]
+     * allows to inflate the bad quality fragmentation, yet keeping the narrow gap ~ 0.
      *
      * @param candidatesNs Numbers of candidates by gap to use for the gap estimation.
      * @return An integer representing the gap.
      */
     fun estimateGap(candidatesNs: IntArray): Int {
-        val deltas = computeGapDeltas(candidatesNs)
-        // Minimal index to estimate deltas is min gap = 2 + 1
-        val peakIdx = (3 until deltas.size).maxBy { deltas[it] }
-        val peak = deltas[peakIdx]
-        // Gently merging curve (narrow case) - nothing to converge, use the default gap.
-        if (peak < OMNIPEAK_GAP_MIN_DELTA) return OMNIPEAK_DEFAULT_GAP
-        // Otherwise, detect convergence in merging curve
-        val convergence = (peakIdx + 1 until deltas.size).firstOrNull { id ->
-            (id until deltas.size).all {
-                deltas[it] < OMNIPEAK_GAP_CONVERGENCE_FRACTION * peak
-            }
-        }
-        // Never decays to a small fraction of its peak rate - return the largest examined gap.
-        return convergence ?: (deltas.size + 1)
+        val n = candidatesNs.size
+        if (n < 2) return OMNIPEAK_DEFAULT_GAP
+        // Laplace-smoothed (+1) log counts, robust for small candidate numbers
+        val logNs = DoubleArray(n) { ln1p(candidatesNs[it].toDouble()) }
+        val totalDecline = logNs.first() - logNs.last()
+        // Curve doesn't decline (no merging at all) - nothing to compensate.
+        if (totalDecline <= 0.0) return OMNIPEAK_DEFAULT_GAP
+        // Mutliplier to get bigger compensation for bad-quality cases
+        val convexity = OMNIPEAK_FRAGMENTATION_MULTIPLIER * (0 until n).sumOf { i ->
+            val chord = logNs.first() + (logNs.last() - logNs.first()) * i / (n - 1)
+            chord - logNs[i]
+        } / totalDecline - OMNIPEAK_FRAGMENTATION_MULTIPLIER
+        // Subtract to get minimal values for good-quality narrow cases
+        return convexity.roundToInt().coerceIn(OMNIPEAK_DEFAULT_GAP, n - 1)
     }
 
 

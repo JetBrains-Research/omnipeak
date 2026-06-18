@@ -14,9 +14,6 @@ import org.jetbrains.bio.genome.coverage.SingleEndCoverage
 import org.jetbrains.bio.omnipeak.OmnipeakCLA
 import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_GAP_CONVERGENCE_FRACTION
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_GAP_MIN_DELTA
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.AutoCorrelations.computeAutoCorrelations
@@ -25,10 +22,10 @@ import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getChromosomeCandid
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNullPvals
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNulls
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.analyzeAdditiveCandidates
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.computeGapDeltas
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.detectSensitivityTriangle
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberLens
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateSensitivity
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.getSensitivitiesAndCandidatesCharacteristics
 import org.jetbrains.bio.omnipeak.peaks.Signal.computeSignalToControlAverage
 import org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM
@@ -239,10 +236,10 @@ object OmnipeakResultAnalysis {
                 sensitivity2use = ln(fdr)
             }
         }
-        logInfo("Sensitivity2use: ${"%.3f".format(sensitivity2use)}", infoWriter)
+        logInfo("Sensitivity: ${"%.3f".format(sensitivity2use)}", infoWriter)
 
         LOG.debug("$name Analysing gap...")
-        val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize) {
+        val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize + 1) {
             estimateCandidatesNumberLens(
                 genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
                 sensitivity2use, it
@@ -253,8 +250,7 @@ object OmnipeakResultAnalysis {
         } else {
             estimateGap(candidateGapNs)
         }
-
-        logInfo("Gap2use: $gap2use", infoWriter)
+        logInfo("Gap: $gap2use", infoWriter)
 
         val candidatesMap = genomeMap(genomeQuery, parallel = true) { chromosome ->
             if (!fitInfo.containsChromosomeInfo(chromosome)) {
@@ -601,26 +597,17 @@ object OmnipeakResultAnalysis {
             estimatedLabel = "Estimated Gap: $gap2use"
         )
 
-        val deltas = computeGapDeltas(candidateGapNs)
-        val deltaGaps = DoubleArray(deltas.size) { it.toDouble() }
-        var gapDeltasTitle = "Gap Deltas Estimation"
-        if (deltas.size > 2) {
-            val peakIdx = (2 until deltas.size).maxByOrNull { deltas[it] }
-            if (peakIdx != null) {
-                val peak = deltas[peakIdx]
-                if (peak < OMNIPEAK_GAP_MIN_DELTA) {
-                    gapDeltasTitle += " peak (${"%.3f".format(peak)}) < $OMNIPEAK_GAP_MIN_DELTA threhold"
-                } else if (peak > 0) {
-                    val threshold = OMNIPEAK_GAP_CONVERGENCE_FRACTION * peak
-                    gapDeltasTitle += " (threshold = $OMNIPEAK_GAP_CONVERGENCE_FRACTION * ${"%.3f".format(peak)} = ${"%.3f".format(threshold)})"
-                }
-            }
+        val n = candidateGapNs.size
+        val logGapsNs = DoubleArray(n) { ln1p(candidateGapNs[it].toDouble()) }
+        val chord = DoubleArray(n) { i ->
+            logGapsNs.first() + (logGapsNs.last() - logGapsNs.first()) * i / (n - 1)
         }
         savePlot(
-            peaksPath, "gap_deltas", gapDeltasTitle,
-            "Gap", "Gap Delta",
-            deltaGaps, deltas, null, gap2use,
-            estimatedLabel = "Estimated Gap: $gap2use"
+            peaksPath, "gap_convexity", "Gap Convexity Estimation",
+            "Gap", "ln(Number of Candidates + 1)",
+            gaps, logGapsNs, null, gap2use,
+            estimatedLabel = "Estimated Gap: $gap2use",
+            yData2 = chord, yData2Label = "Chord"
         )
     }
 
@@ -634,7 +621,9 @@ object OmnipeakResultAnalysis {
         yData: DoubleArray,
         st: SensitivityGap.PepInfo?,
         estimatedIdx: Int,
-        estimatedLabel: String = "Estimated PEP"
+        estimatedLabel: String = "Estimated PEP",
+        yData2: DoubleArray? = null,
+        yData2Label: String? = null
     ) {
         val plotFile = "$peaksPath.$name.png"
         val chart = XYChartBuilder()
@@ -656,6 +645,12 @@ object OmnipeakResultAnalysis {
         series.lineColor = Color.BLACK
         series.markerColor = Color.BLACK
         series.marker = SeriesMarkers.NONE
+
+        if (yData2 != null && yData2Label != null) {
+            val series2 = chart.addSeries(yData2Label, xData, yData2)
+            series2.lineColor = Color.RED
+            series2.marker = SeriesMarkers.NONE
+        }
 
         if (st != null) {
             val triangleIndices = listOf(st.beforeMerge, st.stable, st.beforeNoise)

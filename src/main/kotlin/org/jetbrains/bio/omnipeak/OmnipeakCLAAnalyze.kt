@@ -202,8 +202,6 @@ object OmnipeakCLAAnalyze {
                 LOG.debug(results.model.toString())
 
                 val genomeQuery = fitInfo.genomeQuery()
-                val fragment = fitInfo.fragment
-                val bin = fitInfo.binSize
 
                 if (bigWig) {
                     val bigWigPath = (peaksPath!!.toString() + ".bw").toPath()

@@ -95,14 +95,8 @@ object OmnipeakConstants {
     // i.e. reduction of candidate number when merging with gap
     const val OMNIPEAK_FRAGMENTATION_MAX_GAP_BP = 5000
 
-    // Minimal threshold when detecting effective gap (5%)
-    // This threshold can be estimated after evaluation of the gap_candidates plot in
-    // --deep-analysis mode for multiple broad and narrow marks
-    const val OMNIPEAK_GAP_MIN_DELTA = 0.05
-
-    // Convergence is reached when the per-step decline drops below this fraction of the peak decline rate
-    // This value should be large enough to return values ~2kbp merge in [EstimateGapTest] real data tests
-    const val OMNIPEAK_GAP_CONVERGENCE_FRACTION = 0.25
+    // Multiplier used to inflate the gap estimation for the broad marks of bad quality
+    const val OMNIPEAK_FRAGMENTATION_MULTIPLIER = 2
 
     // When calling summits, min summit length x average single mode peak length
     const val OMNIPEAK_SUMMITS_MIN_LENGTH = 0.5
