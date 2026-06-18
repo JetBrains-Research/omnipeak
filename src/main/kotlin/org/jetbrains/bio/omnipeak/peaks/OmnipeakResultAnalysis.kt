@@ -21,12 +21,9 @@ import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.estimateSingleModeL
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getChromosomeCandidates
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNullPvals
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNulls
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.analyzeAdditiveCandidates
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.detectSensitivityTriangle
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberLens
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateSensitivity
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.getSensitivitiesAndCandidatesCharacteristics
 import org.jetbrains.bio.omnipeak.peaks.Signal.computeSignalToControlAverage
 import org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM
 import org.jetbrains.bio.util.deleteIfExists
@@ -154,7 +151,8 @@ object OmnipeakResultAnalysis {
             coverage = DoubleArray(genomeQuery.get().size) { 0.0 }
         }
         val positiveCoverage = coverage.filter { it > 0 }.toDoubleArray()
-        val positivePercentage = if (coverage.isNotEmpty()) (100.0 * positiveCoverage.size / coverage.size).toInt() else 0
+        val positivePercentage =
+            if (coverage.isNotEmpty()) (100.0 * positiveCoverage.size / coverage.size).toInt() else 0
         val max = positiveCoverage.maxOrNull() ?: 0.0
         val mean = if (positiveCoverage.isNotEmpty()) positiveCoverage.average() else 0.0
         val median = if (positiveCoverage.isNotEmpty()) StatUtils.percentile(positiveCoverage, 50.0) else 0.0
@@ -194,21 +192,16 @@ object OmnipeakResultAnalysis {
         // Already computed above
 
         LOG.info("$name Analysing sensitivity...")
-        val (sensitivities, candidatesNs, candidatesALs) =
-            getSensitivitiesAndCandidatesCharacteristics(
-                genomeQuery,
-                omnipeakFitResults,
-                logNullMembershipsMap,
-                bitList2reuseMap
-            )
-        val st = detectSensitivityTriangle(sensitivities, candidatesNs, candidatesALs)
-
-        LOG.info("$name Analysing additive candidates...")
-        val (totals, news) = analyzeAdditiveCandidates(
-            genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
-            sensitivities, true
+        val sensitivityInfo = estimateSensitivity(
+            genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
+            true, name, null
         )
-
+        val sensitivities = sensitivityInfo.sensitivities
+        val candidatesNs = sensitivityInfo.candidatesNs
+        val candidatesALs = sensitivityInfo.candidatesALs
+        val st = sensitivityInfo.st
+        val totals = sensitivityInfo.totals
+        val news = sensitivityInfo.news
         val sensitivity2use: Double
         when {
             sensitivityCmdArg != null ->
@@ -222,10 +215,8 @@ object OmnipeakResultAnalysis {
                 logInfo("Sensitivity stable index: $stable", infoWriter)
                 logInfo("Sensitivity beforeNoise: ${"%.3f".format(sensitivities[beforeNoise])}", infoWriter)
                 logInfo("Sensitivity beforeNoise index: $beforeNoise", infoWriter)
-
-                val minAdditionalIdx = (st.beforeMerge until st.stable)
-                    .minByOrNull { if (totals[it] == 0) 0.0 else news[it].toDouble() / totals[it].toDouble() }!!
-                val minAdditionalSensitivity = sensitivities[minAdditionalIdx]
+                val minAdditionalIdx = sensitivityInfo.minAdditionalIdx!!
+                val minAdditionalSensitivity = sensitivityInfo.minAdditionalSensitivity!!
                 logInfo("Minimal additional: ${"%.3f".format(minAdditionalSensitivity)}", infoWriter)
                 logInfo("Minimal additional index: $minAdditionalIdx", infoWriter)
                 sensitivity2use = minAdditionalSensitivity
@@ -254,7 +245,7 @@ object OmnipeakResultAnalysis {
 
         val candidatesMap = genomeMap(genomeQuery, parallel = true) { chromosome ->
             if (!fitInfo.containsChromosomeInfo(chromosome)) {
-                return@genomeMap emptyList<Range>()
+                return@genomeMap emptyList()
             }
             val logNullMemberships = logNullMembershipsMap[chromosome]
             val bitList2reuse = bitList2reuseMap[chromosome]
@@ -298,14 +289,16 @@ object OmnipeakResultAnalysis {
             peaksPath, sensitivities
         )
 
+        if (totals != null && news != null && st != null) {
+            prepareSegmentsTsvFile(sensitivities.sliceArray(st.beforeMerge until st.stable), totals, news, peaksPath)
+        }
+
+        OmnipeakModelPlots.prepareModelPlots(peaksPath, omnipeakFitResults)
         prepareDeepAnalysisPlots(
-            peaksPath, sensitivities, candidatesNs, candidatesALs, totals, news, st, sensitivity2use,
+            peaksPath, sensitivities, candidatesNs, candidatesALs, st, totals, news, sensitivity2use,
             coverageCorrelations, logNullPValsCorrelations, fragmentSizeCorrelations, detectedFragment,
             candidateGapNs, gap2use, coverage, positivePercentage
         )
-
-        prepareSegmentsTsvFile(sensitivities, totals, news, peaksPath)
-        OmnipeakModelPlots.prepareModelPlots(peaksPath, omnipeakFitResults)
         LOG.info("$name Done analysis")
     }
 
@@ -486,9 +479,9 @@ object OmnipeakResultAnalysis {
         sensitivities: DoubleArray,
         candidatesNs: IntArray,
         candidatesALs: DoubleArray,
-        totals: IntArray,
-        news: IntArray,
         st: SensitivityGap.PepInfo?,
+        totals: IntArray?,
+        news: IntArray?,
         sensitivity2use: Double,
         coverageCorrelations: DoubleArray,
         logNullPValsCorrelations: DoubleArray,
@@ -525,9 +518,14 @@ object OmnipeakResultAnalysis {
 
         val logNs = DoubleArray(candidatesNs.size) { ln1p(candidatesNs[it].toDouble()) }
         val logALs = DoubleArray(candidatesALs.size) { ln1p(candidatesALs[it]) }
-        val newPercentages = DoubleArray(sensitivities.size) {
-            if (totals[it] == 0) 0.0 else news[it].toDouble() / totals[it] * 100.0
-        }
+        val newPercentages = if (totals != null && st != null) DoubleArray(sensitivities.size) {
+            val idx = it - st.beforeMerge
+            if (idx in totals.indices) {
+                if (totals[idx] == 0) 0.0 else news!![idx].toDouble() / totals[idx] * 100.0
+            } else {
+                0.0
+            }
+        } else null
 
         val pepRanks = DoubleArray(sensitivities.size) { (it + 1).toDouble() }
         val estimatedIdx = sensitivities.indices.minByOrNull { abs(sensitivities[it] - sensitivity2use) } ?: -1
@@ -558,12 +556,14 @@ object OmnipeakResultAnalysis {
         )
 
         // 4) PEP vs new candidates%
-        savePlot(
-            peaksPath, "pep_vs_new", "PEP rank vs new candidates%",
-            "PEP rank", "New candidates%",
-            pepRanks, newPercentages, st, estimatedIdx,
-            estimatedLabel = estimatedPEPLabel
-        )
+        if (newPercentages != null) {
+            savePlot(
+                peaksPath, "pep_vs_new", "PEP rank vs new candidates%",
+                "PEP rank", "New candidates%",
+                pepRanks, newPercentages, st, estimatedIdx,
+                estimatedLabel = estimatedPEPLabel
+            )
+        }
 
         // Also update the original sensitivity vs candidates plot with markers
         val distances = DoubleArray(coverageCorrelations.size) { (it + 1).toDouble() }
@@ -638,8 +638,26 @@ object OmnipeakResultAnalysis {
         chart.styler.plotGridLinesColor = Color.LIGHT_GRAY
         chart.styler.legendPosition = Styler.LegendPosition.InsideNE
         chart.styler.defaultSeriesRenderStyle = XYSeries.XYSeriesRenderStyle.Line
-        chart.styler.xAxisDecimalPattern = if (xTitle in listOf("PEP rank", "Counts", "Gap", "Fragment Size", "Number of Candidates", "Percentile", "Distance")) "0" else "0.000"
-        chart.styler.yAxisDecimalPattern = if (yTitle in listOf("PEP rank", "Counts", "Gap", "Fragment Size", "Number of Candidates", "Percentile", "Distance")) "0" else "0.000"
+        chart.styler.xAxisDecimalPattern = if (xTitle in listOf(
+                "PEP rank",
+                "Counts",
+                "Gap",
+                "Fragment Size",
+                "Number of Candidates",
+                "Percentile",
+                "Distance"
+            )
+        ) "0" else "0.000"
+        chart.styler.yAxisDecimalPattern = if (yTitle in listOf(
+                "PEP rank",
+                "Counts",
+                "Gap",
+                "Fragment Size",
+                "Number of Candidates",
+                "Percentile",
+                "Distance"
+            )
+        ) "0" else "0.000"
 
         val series = chart.addSeries("Data", xData, yData)
         series.lineColor = Color.BLACK

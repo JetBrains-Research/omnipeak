@@ -90,7 +90,7 @@ object OmnipeakModelToPeaks {
             estimateSensitivity(
                 genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
                 parallel, name, cancellableState
-            )
+            ).minAdditionalSensitivity ?: ln(fdr)
         }
         LOG.info("${name ?: ""} " + "Selecting candidates with sensitivity: ${"%.3f".format(sensitivity)}")
 

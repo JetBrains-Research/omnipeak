@@ -8,7 +8,6 @@ import org.jetbrains.bio.genome.Range
 import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.containers.toRangeMergingList
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FDR
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MULTIPLIER
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_MIN_SENSITIVITY
@@ -34,6 +33,18 @@ object SensitivityGap {
         val n: Int, val averageLen: Double, val medianLen: Double, val maxLen: Int
     )
 
+    @Suppress("ArrayInDataClass")
+    data class SensitivityInfo(
+        val sensitivities: DoubleArray,
+        val candidatesNs: IntArray,
+        val candidatesALs: DoubleArray,
+        val st: PepInfo? = null,
+        val totals: IntArray? = null,
+        val news: IntArray? = null,
+        val minAdditionalIdx: Int? = null,
+        val minAdditionalSensitivity: Double? = null,
+    )
+
     fun estimateSensitivity(
         genomeQuery: GenomeQuery,
         omnipeakFitResults: OmnipeakFitResults,
@@ -42,10 +53,10 @@ object SensitivityGap {
         parallel: Boolean,
         name: String?,
         cancellableState: CancellableState?
-    ): Double {
+    ): SensitivityInfo {
         cancellableState?.checkCanceled()
 
-        OmnipeakModelToPeaks.LOG.info("${name ?: ""} Analyzing candidates by sensitivity...")
+        OmnipeakModelToPeaks.LOG.debug("${name ?: ""} Analyzing candidates by sensitivities...")
         val (sensitivities, candidatesNs, candidatesALs) = getSensitivitiesAndCandidatesCharacteristics(
             genomeQuery,
             omnipeakFitResults,
@@ -74,10 +85,11 @@ object SensitivityGap {
                 "${name ?: ""} " +
                         "Minimal additional ${st.beforeMerge + minAdditionalIdx}: $minAdditionalSensitivity"
             )
-            return minAdditionalSensitivity
+            return SensitivityInfo(sensitivities, candidatesNs, candidatesALs,
+                st, totals, news, minAdditionalIdx, minAdditionalSensitivity)
         } else {
             OmnipeakModelToPeaks.LOG.error("${name ?: ""} Failed to estimate sensitivity, using defaults.")
-            return ln(OMNIPEAK_DEFAULT_FDR)
+            return SensitivityInfo(sensitivities, candidatesNs, candidatesALs)
         }
     }
 
