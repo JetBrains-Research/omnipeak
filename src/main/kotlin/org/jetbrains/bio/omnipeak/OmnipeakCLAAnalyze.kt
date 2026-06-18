@@ -356,9 +356,6 @@ object OmnipeakCLAAnalyze {
             OmnipeakCLA.getRegressControl(options, results.fitInfo, log = true)
             val keepCacheFiles = "keep-cache" in options
             LOG.info("KEEP-CACHE: $keepCacheFiles")
-            if (!keepCacheFiles) {
-                LOG.warn("Keep cache files setting (false) is discarded, since fitted model already exists.")
-            }
             return lazyOf(modelPath to results)        // Create fake lazy of already computed results
         } else {
             val paths = prepareAndCheckTreatmentControlPaths(options, log = true)
