@@ -6,7 +6,7 @@ Here you can see the full list of changes between each release.
 Version 1.5
 --------------------
 
-Released on Jul 18th, 2026
+Released on Jun 18th, 2026
 
 - Improved detailed analysis reporting `--deep-analysis` - plot all the algorithm important characteristics
 - Reworked gap estimation as threshold-free log-space convexity of the candidates-by-gap curve - small gap for narrow marks, larger for fragmented broad marks
