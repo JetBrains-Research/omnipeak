@@ -30,32 +30,33 @@ class PeakScorer(
      * @return logPValue or logPEP
      */
     fun logP(cr: ChromosomeRange): Double {
-        val logPs = ArrayList<Double>()
+        var product = 1.0
+        var count = 0
         if (coverageControlComputable != null) {
             val (score, controlScore) = coverageControlComputable(cr)
-            logPs.add(
-                // Evidence vs. control
-                PoissonUtil.logPoissonCdf(ceil(score).toInt() + 1, controlScore + 1)
-            )
+            val p = PoissonUtil.logPoissonCdf(ceil(score).toInt() + 1, controlScore + 1)
+            product *= abs(p)
+            count++
         }
 
         if (avgNoiseDensity != null) {
             checkNotNull(coverageComputable)
             val score = coverageComputable(cr)
-            logPs.add(
-                PoissonUtil.logPoissonCdf(
-                    // Evidence vs. background noise
-                    ceil(score).toInt() + 1, avgNoiseDensity!! * (cr.endOffset - cr.startOffset) + 1
-                )
+            val p = PoissonUtil.logPoissonCdf(
+                ceil(score).toInt() + 1, avgNoiseDensity!! * (cr.endOffset - cr.startOffset) + 1
             )
+            product *= abs(p)
+            count++
         }
 
         // Model PEP over the block's bins
-        logPs.add(modelScoreComputable(cr))
+        val p = modelScoreComputable(cr)
+        product *= abs(p)
+        count++
 
         // Cannot apply FisherCombine here because of dependency between p-values
         // FisherCombine inflates two or more significant pvalues
-        return -logPs.fold(1.0) { acc, v -> acc * abs(v) }.pow(1.0 / logPs.size.toDouble())
+        return -product.pow(1.0 / count.toDouble())
     }
 
     fun valueScore(cr: ChromosomeRange): Double {

@@ -526,7 +526,7 @@ object OmnipeakModelToPeaks {
      */
     fun candidateScoreBlocks(logNullMemberships: F64Array, start: Int, end: Int): List<Range> {
         val p = StatUtils.percentile(
-            logNullMemberships.slice(start, end).toDoubleArray(), OMNIPEAK_SCORE_BLOCKS * 100
+            logNullMemberships.data, logNullMemberships.offset + start, end - start, OMNIPEAK_SCORE_BLOCKS * 100
         )
         return BitList(end - start) { logNullMemberships[it + start] <= p }
             .aggregate(3).map { Range(start + it.startOffset, start + it.endOffset) }

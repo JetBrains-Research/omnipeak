@@ -104,12 +104,15 @@ object BigWigCoverageWriter {
         try {
             chromosomes.mapIndexed { i, chromosome ->
                 Callable {
+                    val numBins = (chromosome.length + binSize - 1) / binSize
                     val section = FixedStepSection(
                         chromosome.name, 0,
                         step = binSize, span = binSize
                     ).apply {
-                        chromosome.range.slice(binSize).forEach { range ->
-                            this.add(scoreCompute(range.on(chromosome)).toFloat())
+                        for (b in 0 until numBins) {
+                            val start = b * binSize
+                            val end = minOf(start + binSize, chromosome.length)
+                            this.add(scoreCompute(ChromosomeRange(start, end, chromosome)).toFloat())
                         }
                     }
                     wigSections[i] = section

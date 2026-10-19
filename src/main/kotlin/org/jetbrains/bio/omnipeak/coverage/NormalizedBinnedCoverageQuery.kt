@@ -14,9 +14,14 @@ class NormalizedBinnedCoverageQuery(val ncq: NormalizedCoverageQuery, val binSiz
         get() = super<CachingQuery>.description + " binned to $binSize bp"
 
     override fun getUncached(input: Chromosome): IntArray {
-        return input.range.slice(binSize).mapToInt { range ->
-            ncq.apply(range.on(input))
-        }.toArray()
+        val numBins = (input.length + binSize - 1) / binSize
+        val result = IntArray(numBins)
+        for (b in 0 until numBins) {
+            val start = b * binSize
+            val end = minOf(start + binSize, input.length)
+            result[b] = ncq.apply(ChromosomeRange(start, end, input))
+        }
+        return result
     }
 
     override fun score(chromosomeRange: ChromosomeRange): Double =

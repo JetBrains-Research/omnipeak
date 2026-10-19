@@ -1,6 +1,5 @@
 package org.jetbrains.bio.omnipeak.coverage
 
-import org.apache.commons.math3.stat.correlation.PearsonsCorrelation
 import org.jetbrains.bio.genome.ChromosomeRange
 import org.jetbrains.bio.genome.GenomeQuery
 import org.jetbrains.bio.genome.coverage.Coverage
@@ -20,6 +19,7 @@ import java.nio.file.Path
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * A class representing a normalized coverage query.
@@ -207,29 +207,57 @@ class NormalizedCoverageQuery(
             val chromosomeWithMaxSignal = genomeQuery.get()
                 .maxByOrNull { treatmentCoverage.getBothStrandsCoverage(it.chromosomeRange) }
                 ?: return NormalizedCoverageInfo(0.0, 0.0, 0.0)
-            val binnedTreatment = chromosomeWithMaxSignal.range.slice(bin).mapToDouble {
-                treatmentCoverage.getBothStrandsCoverage(it.on(chromosomeWithMaxSignal)).toDouble()
-            }.toArray()
-            val binnedControl = chromosomeWithMaxSignal.range.slice(bin).mapToDouble {
-                controlCoverage.getBothStrandsCoverage(it.on(chromosomeWithMaxSignal)).toDouble()
-            }.toArray()
+            val numBins = (chromosomeWithMaxSignal.length + bin - 1) / bin
+            val binnedTreatment = DoubleArray(numBins)
+            val binnedControl = DoubleArray(numBins)
+            for (i in 0 until numBins) {
+                val start = i * bin
+                val end = minOf(start + bin, chromosomeWithMaxSignal.length)
+                val cr = ChromosomeRange(start, end, chromosomeWithMaxSignal)
+                binnedTreatment[i] = treatmentCoverage.getBothStrandsCoverage(cr).toDouble()
+                binnedControl[i] = controlCoverage.getBothStrandsCoverage(cr).toDouble()
+            }
+            var meanX = 0.0
+            var meanY = 0.0
+            for (i in 0 until numBins) {
+                meanX += binnedTreatment[i]
+                meanY += binnedControl[i]
+            }
+            meanX /= numBins
+            meanY /= numBins
+
+            var varX = 0.0
+            var varY = 0.0
+            var covXY = 0.0
+            for (i in 0 until numBins) {
+                val dx = binnedTreatment[i] - meanX
+                val dy = binnedControl[i] - meanY
+                varX += dx * dx
+                varY += dy * dy
+                covXY += dx * dy
+            }
+            if (numBins > 1) {
+                varX /= (numBins - 1)
+                varY /= (numBins - 1)
+                covXY /= (numBins - 1)
+            }
+
             var b = 0.0
             var minCorrelation = 1.0
             var minB = 0.0
-            // Reuse array to reduce GC pressure
-            val binnedNorm = DoubleArray(binnedTreatment.size)
-            val pearsonCorrelation = PearsonsCorrelation()
-            while (b < 1) {
-                for (i in binnedNorm.indices) {
-                    // Using norm here may lead to high beta and signal vanishing
-                    binnedNorm[i] = binnedTreatment[i] - b * controlScale * binnedControl[i]
+            if (varY > 0.0 && numBins >= 2) {
+                while (b < 1) {
+                    val bc = b * controlScale
+                    val covZY = covXY - bc * varY
+                    val varZ = maxOf(0.0, varX + bc * bc * varY - 2.0 * bc * covXY)
+                    val denom = sqrt(varZ * varY)
+                    val c = if (denom > 0.0) abs(covZY / denom) else 1.0
+                    if (c <= minCorrelation) {
+                        minCorrelation = c
+                        minB = b
+                    }
+                    b += betaStep
                 }
-                val c = abs(pearsonCorrelation.correlation(binnedNorm, binnedControl))
-                if (c <= minCorrelation) {
-                    minCorrelation = c
-                    minB = b
-                }
-                b += betaStep
             }
             if (minB == 0.0) {
                 LOG.warn("Failed to estimate beta-value for control correction")
