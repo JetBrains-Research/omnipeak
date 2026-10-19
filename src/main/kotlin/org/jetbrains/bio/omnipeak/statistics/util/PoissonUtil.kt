@@ -1,6 +1,7 @@
 package org.jetbrains.bio.omnipeak.statistics.util
 
 import org.jetbrains.bio.viktor.logAddExp
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.ln
 
@@ -17,6 +18,24 @@ object PoissonUtil {
         for (i in 1 until size) {
             this[i] = this[i - 1] + LOGS[i]
         }
+    }
+
+    private val LN_SQRT_PI = 0.5 * ln(PI)
+
+    /**
+     * Approximates ln(m!) for large m using Ramanujan's formula for Stirling's approximation:
+     *   ln(m!) ≈ m * ln(m) - m + (1/6) * ln(m * (1 + 4m * (1 + 2m))) + (1/2) * ln(π)
+     *
+     * Reference:
+     *   Srinivasa Ramanujan, "The Lost Notebook and Other Unpublished Papers" (1988).
+     *   See also: Stirling's approximation (Ramanujan's formula).
+     */
+    fun logFactorial(m: Int): Double {
+        if (m < PREFIX_LOGS_SUMS.size) {
+            return PREFIX_LOGS_SUMS[m]
+        }
+        val md = m.toDouble()
+        return md * ln(md) - md + (ln(md * (1.0 + 4.0 * md * (1.0 + 2.0 * md))) / 6.0) + LN_SQRT_PI
     }
 
     /**
@@ -39,10 +58,7 @@ object PoissonUtil {
         val lnLbd = ln(lbd)
         // first residue
         val m = k + 1
-        val sumLns = if (m < PREFIX_LOGS_SUMS.size)
-            PREFIX_LOGS_SUMS[m]
-        else
-            PREFIX_LOGS_SUMS.last() + (PREFIX_LOGS_SUMS.size .. m).sumOf { lnTab(it) }
+        val sumLns = logFactorial(m)
         logX = m * lnLbd - sumLns
         residue = logX
         var logy: Double
