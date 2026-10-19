@@ -31,6 +31,9 @@ class NegBinEmissionScheme(mean: Double, failures: Double) :
     @Transient
     private var logP: Double = 0.0
 
+    @Transient
+    private var logProbCache: DoubleArray = DoubleArray(0)
+
     init {
         updateTransients()
     }
@@ -46,7 +49,7 @@ class NegBinEmissionScheme(mean: Double, failures: Double) :
         return IntSupplier { distribution.sample() }
     }
 
-    override fun logProbability(value: Int): Double = when {
+    private fun computeLogProbability(value: Int): Double = when {
         mean.isNaN() || failures.isNaN() || value < 0 || value == Integer.MAX_VALUE -> Double.NEGATIVE_INFINITY
         mean == 0.0 -> if (value == 0) 0.0 else Double.NEGATIVE_INFINITY
         failures.isInfinite() -> value * logMean - mean - MoreMath.factorialLog(value)
@@ -54,6 +57,13 @@ class NegBinEmissionScheme(mean: Double, failures: Double) :
             Gamma.logGamma(value + failures) - MoreMath.factorialLog(value) +
                     fLog1MinusPMinusLogGammaF + value * logP
         }
+    }
+
+    override fun logProbability(value: Int): Double {
+        if (value in logProbCache.indices) {
+            return logProbCache[value]
+        }
+        return computeLogProbability(value)
     }
 
     override fun update(sample: IntArray, weights: F64Array) {
@@ -72,9 +82,11 @@ class NegBinEmissionScheme(mean: Double, failures: Double) :
         } else {
             failures * ln(1.0 - p) - Gamma.logGamma(failures)
         }
+        logProbCache = DoubleArray(LOG_PROB_CACHE_SIZE) { computeLogProbability(it) }
     }
 
     companion object {
+        private const val LOG_PROB_CACHE_SIZE = 10001
         private val LOG = LoggerFactory.getLogger(NegBinEmissionScheme::class.java)
     }
 }

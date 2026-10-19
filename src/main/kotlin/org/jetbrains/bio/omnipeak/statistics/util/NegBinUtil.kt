@@ -5,6 +5,7 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_LOW
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_HMM_ESTIMATE_LOW
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_HMM_MAX_MEAN_TO_STD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_HMM_NB_VAR_MEAN_MULTIPLIER
+import org.jetbrains.bio.statistics.average
 import org.jetbrains.bio.statistics.distribution.NegativeBinomialDistribution.Companion.estimateFailuresUsingMoments
 import org.jetbrains.bio.statistics.standardDeviation
 import org.slf4j.LoggerFactory
@@ -44,9 +45,9 @@ object NegBinUtil {
         emissions.sortDescending()
 
         val fraction = if (estimateSNRFraction > 0) estimateSNRFraction else OMNIPEAK_DEFAULT_HMM_ESTIMATE_SNR
-        val highEmissions = IntArray((emissions.size * fraction).toInt()) { emissions[it] }
-        var meanH = highEmissions.average()
-        val sdH = highEmissions.standardDeviation()
+        val highCount = (emissions.size * fraction).toInt()
+        var meanH = emissions.average(0, highCount)
+        val sdH = emissions.standardDeviation(0, highCount)
         LOG.debug("High $fraction emissions mean $meanH\t std $sdH")
         if (meanH > maxMeanToStd * (sdH + 1e-10)) {
             LOG.warn("High mean / std > $maxMeanToStd, adjusting...")
@@ -55,11 +56,10 @@ object NegBinUtil {
         }
 
         // Most likely close to 1, but in case when all the coverage is extremely high this helps
-        val lowEmissions = IntArray((emissions.size * estimateLowFraction).toInt()) {
-            emissions[emissions.size - it - 1]
-        }
-        val meanL = lowEmissions.average()
-        val sdL = lowEmissions.standardDeviation()
+        val lowCount = (emissions.size * estimateLowFraction).toInt()
+        val lowOffset = emissions.size - lowCount
+        val meanL = emissions.average(lowOffset, lowCount)
+        val sdL = emissions.standardDeviation(lowOffset, lowCount)
         LOG.debug("Low $estimateLowFraction emissions mean $meanL\t std $sdL")
 
         val signalToNoiseRatio = meanH / meanL
