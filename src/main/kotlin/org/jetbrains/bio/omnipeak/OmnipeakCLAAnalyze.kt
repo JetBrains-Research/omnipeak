@@ -94,6 +94,16 @@ object OmnipeakCLAAnalyze {
                 )
 
                 OmnipeakCLA.checkMemory()
+                val threads = options.valueOf("threads") as Int? ?: Runtime.getRuntime().availableProcessors()
+                check(threads > 0) {
+                    "Negative threads value: $threads"
+                }
+                check(threads <= Runtime.getRuntime().availableProcessors()) {
+                    "Too big threads value $threads > ${Runtime.getRuntime().availableProcessors()}"
+                }
+                configureParallelism(threads)
+                LOG.info("THREADS: ${parallelismLevel()}")
+
                 val peaksPath = options.valueOf("peaks") as Path?
                 val modelPath = options.valueOf("model") as Path?
                 val modelAlreadyExists = modelPath != null && modelPath.exists && modelPath.size.isNotEmpty()
@@ -173,16 +183,6 @@ object OmnipeakCLAAnalyze {
                     LOG.info("Fdr, sensitivity, gap, clip options are ignored.")
                 }
 
-                val threads = options.valueOf("threads") as Int? ?: Runtime.getRuntime().availableProcessors()
-                check(threads > 0) {
-                    "Negative threads value: $threads"
-                }
-                check(threads <= Runtime.getRuntime().availableProcessors()) {
-                    "Too big threads value $threads > ${Runtime.getRuntime().availableProcessors()}"
-                }
-                configureParallelism(threads)
-                LOG.info("THREADS: ${parallelismLevel()}")
-
                 // Print all the constants, which are not configured using command line
                 if (LOG.isDebugEnabled) {
                     printConstants()
@@ -217,7 +217,7 @@ object OmnipeakCLAAnalyze {
                             blackListPath = blackListPath,
                             name = peaksPath.fileName.stem,
                         )
-                    val peaksList = processBlackList(genomeQuery, peaks, blackListPath)
+                    val peaksList = peaks.peaks
 
                     LOG.info("${peaksPath.fileName.stem} format chromosome, start, end, name, score, strand, signal, -log(p), -log(q)")
                     Peak.savePeaks(peaksList, peaksPath, "peak_${peaksPath.fileName.stem}")
@@ -226,7 +226,8 @@ object OmnipeakCLAAnalyze {
                         genomeQuery,
                         peaksList.map { it.location }.stream(),
                         peaksPath.toUri(),
-                        fitInfo.paths.map { it.treatment }
+                        fitInfo.paths.map { it.treatment },
+                        fitInfo.fragment
                     )
                     LOG.info(aboutPeaks.joinToString("\n") { (k, v) ->
                         "${k.name}: ${k.render(v)}"
