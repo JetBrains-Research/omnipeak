@@ -1,6 +1,7 @@
 package org.jetbrains.bio.omnipeak.statistics.hmm
 
 import org.jetbrains.bio.dataframe.DataFrame
+import org.jetbrains.bio.dataframe.filterNonZeros
 import org.jetbrains.bio.omnipeak.fit.ZLH
 import org.jetbrains.bio.omnipeak.fit.ZLHID
 import org.jetbrains.bio.omnipeak.statistics.emission.NegBinEmissionScheme
@@ -92,13 +93,20 @@ class ConstrainedNBZHMM(
                     title: String,
                     threshold: Double,
                     maxIterations: Int
+                ): ConstrainedNBZHMM = guess(listOf(preprocessed), title, threshold, maxIterations)
+
+                override fun guess(
+                    preprocessed: List<Preprocessed<DataFrame>>,
+                    title: String,
+                    threshold: Double,
+                    maxIterations: Int
                 ): ConstrainedNBZHMM {
-                    val df = preprocessed.get()
+                    val df = DataFrame.rowBind(preprocessed.map { it.get() }.toTypedArray())
                     val means = DoubleArray(numReplicates * 2)
                     val failures = DoubleArray(numReplicates * 2)
                     for (d in 0 until numReplicates) {
                         // Filter out 0s, since they are covered by dedicated ZERO state
-                        val emissions = df.sliceAsInt(df.labels[d]).filter { it != 0 }.toIntArray()
+                        val emissions = df.sliceAsInt(df.labels[d]).filterNonZeros()
                         check(emissions.isNotEmpty()) {
                             "Model can't be trained on empty coverage, exiting."
                         }
@@ -149,7 +157,7 @@ class ConstrainedNBZHMM(
                     val failures = DoubleArray((numReplicates1 + numReplicates2) * 2)
                     for (d1 in 0 until numReplicates1) {
                         // Filter out 0s, since they are covered by dedicated ZERO state
-                        val emissions1 = df.sliceAsInt(df.labels[d1]).filter { it != 0 }.toIntArray()
+                        val emissions1 = df.sliceAsInt(df.labels[d1]).filterNonZeros()
                         check(emissions1.isNotEmpty()) {
                             "Model can't be trained on empty coverage (track $d1), exiting."
                         }
@@ -162,7 +170,7 @@ class ConstrainedNBZHMM(
                     }
                     for (d2 in 0 until numReplicates2) {
                         // Filter out 0s, since they are covered by dedicated ZERO state
-                        val emissions2 = df.sliceAsInt(df.labels[d2 + numReplicates1]).filter { it != 0 }.toIntArray()
+                        val emissions2 = df.sliceAsInt(df.labels[d2 + numReplicates1]).filterNonZeros()
                         check(emissions2.isNotEmpty()) {
                             "Model can't be trained on empty coverage (track ${d2 + numReplicates1}), exiting."
                         }

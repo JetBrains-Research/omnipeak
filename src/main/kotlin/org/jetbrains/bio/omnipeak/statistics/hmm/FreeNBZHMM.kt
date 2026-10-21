@@ -1,6 +1,7 @@
 package org.jetbrains.bio.omnipeak.statistics.hmm
 
 import org.jetbrains.bio.dataframe.DataFrame
+import org.jetbrains.bio.dataframe.filterNonZeros
 import org.jetbrains.bio.omnipeak.statistics.emission.NegBinEmissionScheme
 import org.jetbrains.bio.statistics.Preprocessed
 import org.jetbrains.bio.statistics.emission.ConstantIntegerEmissionScheme
@@ -78,12 +79,18 @@ open class FreeNBZHMM(nbMeans: DoubleArray, nbFailures: DoubleArray,
         private val LOG = LoggerFactory.getLogger(FreeNBZHMM::class.java)
 
         fun positiveCoverage(preprocessed: List<Preprocessed<DataFrame>>): IntArray {
-            // Filter out 0s, since they are covered by dedicated ZERO state
-            val result = preprocessed.flatMap {
-                it.get().let { df -> df.sliceAsInt(df.labels.first()).toList() }
-            }.filter { it != 0 }.toIntArray()
-            check(result.isNotEmpty()) { "Model can't be trained on empty coverage, exiting." }
-            return result
+            val arrays = preprocessed.map { it.get().let { df -> df.sliceAsInt(df.labels.first()) } }
+            return when {
+                arrays.isEmpty() -> {
+                    IntArray(0)
+                }
+
+                arrays.size == 1 -> {
+                    arrays[0].filterNonZeros()
+                }
+
+                else -> arrays.filterNonZeros()
+            }
         }
 
         /**

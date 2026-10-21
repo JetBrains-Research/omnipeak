@@ -57,7 +57,10 @@ abstract class OmnipeakModelFitExperiment<
      * Preprocessed data by chromosomes, chromosomes are sorted by name.
      */
     private val preprocessedData: List<Preprocessed<DataFrame>> by lazy {
-        genomeQuery.get().sortedBy { it.name }.map { Preprocessed.of(dataQuery.apply(it)) }
+        val map = genomeMap(genomeQuery, parallel = true) {
+            Preprocessed.of(dataQuery.apply(it))
+        }
+        genomeQuery.get().sortedBy { it.name }.map { map[it] }
     }
 
     val results: OmnipeakFitResults by lazy { getOrLoadResults() }
