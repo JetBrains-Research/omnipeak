@@ -20,6 +20,7 @@ import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakResult
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakResultAnalysis.doDeepAnalysis
 import org.jetbrains.bio.omnipeak.peaks.Peak
+import org.jetbrains.bio.omnipeak.peaks.savePeaks
 import org.jetbrains.bio.util.*
 import org.slf4j.event.Level
 import java.nio.file.Path
@@ -329,10 +330,11 @@ object OmnipeakCLAAnalyze {
                 modelPath
             )
             val results = OmnipeakModelFitExperiment.loadResults(modelPath = modelPath)
-            check(results.fitInfo is OmnipeakAnalyzeFitInformation) {
-                "Expected ${OmnipeakAnalyzeFitInformation::class.java.simpleName}, got ${results.fitInfo::class.java.name}"
+            val fitInfo = results.fitInfo
+            check(fitInfo is OmnipeakAnalyzeFitInformation) {
+                "Expected ${OmnipeakAnalyzeFitInformation::class.java.simpleName}, got ${fitInfo::class.java.name}"
             }
-            prepareAndCheckTreatmentControlPaths(options, results.fitInfo, log = true)
+            prepareAndCheckTreatmentControlPaths(options, fitInfo, log = true)
             val blacklistPath = options.valueOf("blacklist") as Path?
             if (blacklistPath != null) {
                 LOG.info("BLACKLIST FILE: $blacklistPath")

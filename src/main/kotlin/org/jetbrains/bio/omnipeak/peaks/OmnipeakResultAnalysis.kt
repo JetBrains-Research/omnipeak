@@ -14,18 +14,18 @@ import org.jetbrains.bio.genome.coverage.SingleEndCoverage
 import org.jetbrains.bio.omnipeak.OmnipeakCLA
 import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.AutoCorrelations.computeAutoCorrelations
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.estimateSingleModeLength
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getChromosomeCandidates
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNullPvals
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNulls
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberLens
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateSensitivity
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateSensitivityAndGap
 import org.jetbrains.bio.omnipeak.peaks.Signal.computeSignalToControlAverage
+import org.jetbrains.bio.omnipeak.statistics.hmm.ConstrainedNBZHMM
+import org.jetbrains.bio.omnipeak.statistics.hmm.FreeNBZHMM
 import org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM
+import org.jetbrains.bio.statistics.standardDeviation
 import org.jetbrains.bio.util.deleteIfExists
 import org.jetbrains.bio.util.stem
 import org.jetbrains.bio.util.toPath
@@ -85,8 +85,9 @@ object OmnipeakResultAnalysis {
                 "${k.name}: ${k.render(v)}"
             } + "\n")
         }
-        val modelLowSignalToNoise = omnipeakFitResults.model is NB2ZHMM &&
-                omnipeakFitResults.model.outOfSignalToNoiseRatioRangeDown
+        val model = omnipeakFitResults.model
+        val modelLowSignalToNoise = model is NB2ZHMM &&
+                model.outOfSignalToNoiseRatioRangeDown
         logInfo("Model low signal to noise: $modelLowSignalToNoise", infoWriter)
 
         val blackList = if (blackListPath != null) {
@@ -191,24 +192,34 @@ object OmnipeakResultAnalysis {
         LOG.debug("$name Analysing autocorrelation...")
         // Already computed above
 
-        LOG.info("$name Analysing sensitivity...")
-        val sensitivityInfo = estimateSensitivity(
+        LOG.info("$name Analysing sensitivity and gap...")
+        val sensitivityGapResult = estimateSensitivityAndGap(
             genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
-            true, name, null
+            fdr = fdr,
+            sensitivityCmdArg = sensitivityCmdArg,
+            gapCmdArg = gapCmdArg,
+            summits = false,
+            parallel = true,
+            name = name,
+            cancellableState = null
         )
+        val sensitivityInfo = sensitivityGapResult.sensitivityInfo
         val sensitivities = sensitivityInfo.sensitivities
         val candidatesNs = sensitivityInfo.candidatesNs
         val candidatesALs = sensitivityInfo.candidatesALs
-        val st = sensitivityInfo.st
+        val pepInfo = sensitivityInfo.pepInfo
         val totals = sensitivityInfo.totals
         val news = sensitivityInfo.news
-        val sensitivity2use: Double
+        val sensitivity2use = sensitivityGapResult.sensitivity
+        val gap2use = sensitivityGapResult.gap
+        val candidateGapNs = sensitivityGapResult.candidateGapNs
+
         when {
             sensitivityCmdArg != null ->
-                sensitivity2use = sensitivityCmdArg
+                logInfo("Configured sensitivity: ${"%.3f".format(sensitivity2use)}", infoWriter)
 
-            st != null -> {
-                val (beforeMerge, stable, beforeNoise) = st
+            pepInfo != null -> {
+                val (beforeMerge, stable, beforeNoise) = pepInfo
                 logInfo("Sensitivity beforeMerge: ${"%.3f".format(sensitivities[beforeMerge])}", infoWriter)
                 logInfo("Sensitivity beforeMerge index: $beforeMerge", infoWriter)
                 logInfo("Sensitivity stable: ${"%.3f".format(sensitivities[stable])}", infoWriter)
@@ -219,28 +230,13 @@ object OmnipeakResultAnalysis {
                 val minAdditionalSensitivity = sensitivityInfo.minAdditionalSensitivity!!
                 logInfo("Minimal additional: ${"%.3f".format(minAdditionalSensitivity)}", infoWriter)
                 logInfo("Minimal additional index: $minAdditionalIdx", infoWriter)
-                sensitivity2use = minAdditionalSensitivity
             }
 
             else -> {
-                LOG.error("$name Failed to automatically estimate sensitivity")
-                sensitivity2use = ln(fdr)
+                logInfo("Failed to automatically estimate sensitivity", infoWriter)
             }
         }
         logInfo("Sensitivity: ${"%.3f".format(sensitivity2use)}", infoWriter)
-
-        LOG.debug("$name Analysing gap...")
-        val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize + 1) {
-            estimateCandidatesNumberLens(
-                genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
-                sensitivity2use, it
-            ).n
-        }
-        val gap2use = if (gapCmdArg != null) {
-            gapCmdArg
-        } else {
-            estimateGap(candidateGapNs)
-        }
         logInfo("Gap: $gap2use", infoWriter)
 
         val candidatesMap = genomeMap(genomeQuery, parallel = true) { chromosome ->
@@ -249,26 +245,34 @@ object OmnipeakResultAnalysis {
             }
             val logNullMemberships = logNullMembershipsMap[chromosome]
             val bitList2reuse = bitList2reuseMap[chromosome]
-            getChromosomeCandidates(chromosome, logNullMemberships, bitList2reuse, sensitivity2use, gap2use)
+            getChromosomeCandidates(chromosome, logNullMemberships, bitList2reuse, sensitivityGapResult)
         }
 
         val avgModeLen = estimateSingleModeLength(genomeQuery, fitInfo, candidatesMap, true)
         logInfo("Single model length: ${"%.3f".format(avgModeLen.toDouble())}", infoWriter)
 
-        val peakScorer = PeakScorer.create(fitInfo, logNullMembershipsMap)
+        val failures = when (val fitModel = omnipeakFitResults.model) {
+            is FreeNBZHMM -> if (fitModel.failures.length > 0) fitModel.failures[0] else null
+            is ConstrainedNBZHMM -> if (fitModel.failures.length > 0) fitModel.failures[0] else null
+            else -> null
+        }
+
+        val candidatesScores = CandidatesScores.create(
+            fitInfo, logNullMembershipsMap, sensitivityGapResult.avgAutocorrelation, failures
+        )
 
         // Estimate signal and noise average signal by candidates
         val (avgSignalDensity, avgNoiseDensity) =
-            peakScorer.analyzeSignalAndNoise(genomeQuery, fitInfo, candidatesMap, true)
+            candidatesScores.analyzeSignalAndNoise(genomeQuery, fitInfo, candidatesMap, true)
         logInfo("Candidates signal density: ${"%.3f".format(avgSignalDensity ?: 0.0)}", infoWriter)
         logInfo("Candidates noise density: ${"%.3f".format(avgNoiseDensity ?: 0.0)}", infoWriter)
         val signalToNoise = if (avgSignalDensity != null && avgNoiseDensity != null)
             avgSignalDensity / avgNoiseDensity else 0.0
         logInfo("Coverage signal to noise: ${"%.3f".format(signalToNoise)}", infoWriter)
 
-        if (peakScorer.coverageControlComputable != null) {
+        if (candidatesScores.coverageControlComputable != null) {
             val signalToControl = computeSignalToControlAverage(
-                genomeQuery, fitInfo, candidatesMap, peakScorer.coverageControlComputable, true
+                genomeQuery, fitInfo, candidatesMap, candidatesScores.coverageControlComputable, true
             )
             logInfo("Coverage signal to control: ${"%.3f".format(signalToControl)}", infoWriter)
         }
@@ -289,13 +293,13 @@ object OmnipeakResultAnalysis {
             peaksPath, sensitivities
         )
 
-        if (totals != null && news != null && st != null) {
-            prepareSegmentsTsvFile(sensitivities.sliceArray(st.beforeMerge until st.stable), totals, news, peaksPath)
+        if (totals != null && news != null && pepInfo != null) {
+            prepareSegmentsTsvFile(sensitivities.sliceArray(pepInfo.beforeMerge until pepInfo.stable), totals, news, peaksPath)
         }
 
         OmnipeakModelPlots.prepareModelPlots(peaksPath, omnipeakFitResults)
         prepareDeepAnalysisPlots(
-            peaksPath, sensitivities, candidatesNs, candidatesALs, st, totals, news, sensitivity2use,
+            peaksPath, sensitivities, candidatesNs, candidatesALs, pepInfo, totals, news, sensitivity2use,
             coverageCorrelations, logNullPValsCorrelations, fragmentSizeCorrelations, detectedFragment,
             candidateGapNs, gap2use, coverage, positivePercentage
         )
@@ -858,15 +862,6 @@ object OmnipeakResultAnalysis {
         }
     }
 
-    fun DoubleArray.standardDeviation(): Double {
-        var sum = 0.0
-        var sumSq = 0.0
-        for (value in this) {
-            sum += value
-            sumSq += value * value
-        }
-        return sqrt((sumSq - sum * sum / size) / size)
-    }
 
 }
 

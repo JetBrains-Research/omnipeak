@@ -8,17 +8,17 @@ import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.omnipeak.coverage.BigWigBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SCORE_BLOCKS
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.fit.OmnipeakModelFitExperiment
+import org.jetbrains.bio.omnipeak.fit.offsets
 import org.jetbrains.bio.omnipeak.modes.HartiganDip
 import org.jetbrains.bio.omnipeak.modes.KdeModeFinder
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateCandidatesNumberLens
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateGap
-import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.estimateSensitivity
+import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.SensitivityGapResult
 import org.jetbrains.bio.omnipeak.peaks.Signal.clipPeakBySignal
+import org.jetbrains.bio.omnipeak.statistics.hmm.ConstrainedNBZHMM
+import org.jetbrains.bio.omnipeak.statistics.hmm.FreeNBZHMM
 import org.jetbrains.bio.statistics.f64Array
 import org.jetbrains.bio.statistics.hypothesis.BenjaminiHochberg
 import org.jetbrains.bio.statistics.hypothesis.Fdr
@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import java.util.concurrent.Callable
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.collections.forEach
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
@@ -43,15 +44,16 @@ object OmnipeakModelToPeaks {
     /**
      * Main method to compute peaks from the model.
      *
-     * 1) Estimate posterior error probabilities PEP
-     * 2) Find sensitivity setting as stable point wrt candidates number and average length.
-     * 3) Compute required gap to compensate for extra high fragmentation, i.e. fraction of peaks when increasing gap
-     * 4) Assign p-value to each peak based on combined p-values for cores (consequent foreground bins).
-     *    In case when control track is present, we use Poisson CDF to estimate log P-value;
-     *    otherwise, an average log PEP (posterior error probability) for bins in blocks is used.
-     *    N% top significant blocks scores are aggregated using length-weighted average as P for peak.
-     * 5) Compute qvalues by peaks p-values, filter by alpha.
-     * 6) Fine-tuning boundaries of point-wise peaks according to the local signal.
+     * 1) Estimate posterior error probabilities (PEP) from the fitted model.
+     * 2) Find baseline sensitivity (stability point of candidate count vs. average length), merge sensitivity
+     *    with log FDR, gap parameter, and track temperature.
+     * 3) Extract candidates using sensitivity and merge within `gap`.
+     * 4) Assign p-value to each peak based on combined p-values for cores (consecutive foreground bins).
+     *    When coverage is present, Negative Binomial or Poisson CDF is evaluated against local/global background;
+     *    otherwise, mean log PEPs are used as fallback model scores.
+     *    Top significant block scores are aggregated using length-weighted average.
+     * 5) Compute q-values from peak p-values and filter by FDR.
+     * 6) Fine-tune boundaries of point-wise peaks according to local signal / summits.
      */
     fun getPeaks(
         omnipeakFitResults: OmnipeakFitResults,
@@ -83,33 +85,13 @@ object OmnipeakModelToPeaks {
             BitList(logNullMembershipsMap[chromosome].length)
         }
 
-        // Estimate sensitivity
-        val sensitivity = if (sensitivityCmdArg != null) {
-            sensitivityCmdArg
-        } else {
-            estimateSensitivity(
-                genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
-                parallel, name, cancellableState
-            ).minAdditionalSensitivity ?: ln(fdr)
-        }
-        LOG.info("${name ?: ""} " + "Selecting candidates with sensitivity: ${"%.3f".format(sensitivity)}")
-
-        // Estimate gap
-        val gap = when {
-            gapCmdArg != null -> gapCmdArg
-            summits -> 0
-            else -> {
-                LOG.info("${name ?: ""} Analysing gap...")
-                val candidateGapNs = IntArray(OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize + 1) {
-                    estimateCandidatesNumberLens(
-                        genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
-                        sensitivity, it
-                    ).n
-                }
-                estimateGap(candidateGapNs)
-            }
-        }
-        LOG.info("${name ?: ""} Selecting candidates with gap: $gap")
+        // Estimate sensitivity and gap
+        val sensitivityGapResult = SensitivityGap.estimateSensitivityAndGap(
+            genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
+            fdr, sensitivityCmdArg, gapCmdArg, summits, parallel, name, cancellableState
+        )
+        val sensitivity = sensitivityGapResult.sensitivity
+        val gap = sensitivityGapResult.gap
 
         val candidatesMap = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
             cancellableState?.checkCanceled()
@@ -120,47 +102,57 @@ object OmnipeakModelToPeaks {
             val bitList2reuse = bitList2reuseMap[chromosome]
             getChromosomeCandidates(
                 chromosome, logNullMemberships, bitList2reuse,
-                sensitivity, gap
+                sensitivityGapResult
             )
         }
 
         val singleModeLength =
             estimateSingleModeLength(genomeQuery, fitInfo, candidatesMap, parallel)
 
+        val failures = when (val model = omnipeakFitResults.model) {
+            is FreeNBZHMM -> if (model.failures.length > 0) model.failures[0] else null
+            is ConstrainedNBZHMM -> if (model.failures.length > 0) model.failures[0] else null
+            else -> null
+        }
+
         val peaks = candidatesToPeaks(
             genomeQuery,
             fitInfo,
             logNullMembershipsMap,
+            sensitivityGapResult.avgAutocorrelation,
+            failures,
+            sensitivity,
             candidatesMap,
             summits,
             singleModeLength,
-            clip,
             fdr,
+            clip,
             multipleTesting,
             blackListPath,
             name,
             parallel,
-            cancellableState,
-            sensitivity
+            cancellableState
         )
-        return OmnipeakResult(fdr, sensitivity, gap, peaks)
+        return OmnipeakResult(fdr, sensitivityGapResult.sensitivity, gap, peaks)
     }
 
     fun candidatesToPeaks(
         genomeQuery: GenomeQuery,
         fitInfo: OmnipeakFitInformation,
         logNullMembershipsMap: GenomeMap<F64Array>,
+        avgAutocorrelation: Double = 0.0,
+        failures: Double? = null,
+        sensitivity: Double,
         candidatesMap: GenomeMap<List<Range>>,
         summits: Boolean,
         singleModeLength: Int,
-        clip: Double,
         fdr: Double,
-        testing: MultipleTesting,
-        blackListPath: Path?,
-        name: String?,
-        parallel: Boolean,
-        cancellableState: CancellableState?,
-        sensitivity: Double
+        clip: Double,
+        testing: MultipleTesting = MultipleTesting.BH,
+        blackListPath: Path? = null,
+        name: String? = null,
+        parallel: Boolean = false,
+        cancellableState: CancellableState? = null
     ): List<Peak> {
         var candidatesOrSummitsMap = candidatesMap
         if (summits) {
@@ -206,9 +198,11 @@ object OmnipeakModelToPeaks {
             LocationsMergingList.load(genomeQuery, blackListPath)
         } else null
 
-        val peakScorer = PeakScorer.create(fitInfo, logNullMembershipsMap)
+        val candidatesScores = CandidatesScores.create(
+            fitInfo, logNullMembershipsMap, avgAutocorrelation, failures
+        )
 
-        val (avgSignalDensity, avgNoiseDensity) = peakScorer.analyzeSignalAndNoise(
+        val (avgSignalDensity, avgNoiseDensity) = candidatesScores.analyzeSignalAndNoise(
             genomeQuery,
             fitInfo,
             candidatesOrSummitsMap,
@@ -256,7 +250,7 @@ object OmnipeakModelToPeaks {
                     return@genomeMap FAKE_ARRAY // Return fake array to keep typing
                 }
                 return@genomeMap estimateCandidatesLogPs(
-                    chromosome, candidateCoordinatesMap[chromosome], peakScorer, cancellableState
+                    chromosome, candidateCoordinatesMap[chromosome], candidatesScores, cancellableState
                 )
             }
 
@@ -277,10 +271,10 @@ object OmnipeakModelToPeaks {
             // Without a coverage source there are no genuine p-values, only model posterior
             // error probabilities (PEPs); estimate FDR by averaging PEPs (Fdr.qvalidate)
             // rather than applying Benjamini-Hochberg / Bonferroni, which require p-values.
-            val adjustmentDescription = if (!peakScorer.producesPValues) "averaged PEP" else testing.description
+            val adjustmentDescription = if (!candidatesScores.producesPValues) "averaged PEP" else testing.description
             LOG.info("${name ?: ""} Adjusting $adjustmentDescription, N=${genomeLogPVals.length}")
             val genomeLogQVals = when {
-                !peakScorer.producesPValues ->
+                !candidatesScores.producesPValues ->
                     Fdr.qvalidatePEPs(genomeLogPVals, logResults = true)
 
                 testing == MultipleTesting.BH ->
@@ -313,7 +307,7 @@ object OmnipeakModelToPeaks {
                     }
                     val blocks = candidate.blocks
                     val vals = blocks.map {
-                        peakScorer.valueScore(ChromosomeRange(it.startOffset, it.endOffset, chromosome))
+                        candidatesScores.valueScore(ChromosomeRange(it.startOffset, it.endOffset, chromosome))
                     }
                     val peakValue = lengthWeightedScores(blocks, vals)
                     Peak(
@@ -397,6 +391,35 @@ object OmnipeakModelToPeaks {
         }
         return bins.aggregate(gap)
     }
+
+    fun getChromosomeCandidates(
+        chromosome: Chromosome,
+        logNullMemberships: F64Array,
+        bitList2reuse: BitList?,
+        sensitivities: DoubleArray,
+        gap: Int
+    ): List<Range> {
+        if (sensitivities.isEmpty()) {
+            return emptyList()
+        }
+        return getChromosomeCandidates(
+            chromosome, logNullMemberships, bitList2reuse,
+            sensitivities[0], gap
+        )
+    }
+
+    fun getChromosomeCandidates(
+        chromosome: Chromosome,
+        logNullMemberships: F64Array,
+        bitList2reuse: BitList?,
+        sensitivityGapResult: SensitivityGapResult
+    ): List<Range> = getChromosomeCandidates(
+        chromosome,
+        logNullMemberships,
+        bitList2reuse,
+        sensitivityGapResult.sensitivity,
+        sensitivityGapResult.gap
+    )
 
 
     fun getChromosomeSummits(
@@ -503,7 +526,7 @@ object OmnipeakModelToPeaks {
     fun estimateCandidatesLogPs(
         chromosome: Chromosome,
         candidateCoordinates: List<CandidateCoordinates>,
-        peakScorer: PeakScorer,
+        candidatesScores: CandidatesScores,
         cancellableState: CancellableState?
     ): F64Array {
         if (candidateCoordinates.isEmpty()) {
@@ -513,7 +536,7 @@ object OmnipeakModelToPeaks {
             cancellableState?.checkCanceled()
             val blocks = candidateCoordinates[idx].blocks
             val blocksLogPs = blocks.map { (blockStart, blockEnd) ->
-                val logPValue = peakScorer.logP(ChromosomeRange(blockStart, blockEnd, chromosome))
+                val logPValue = candidatesScores.logP(ChromosomeRange(blockStart, blockEnd, chromosome))
                 check(!logPValue.isNaN()) { "P-value is nan" }
                 logPValue
             }
@@ -578,7 +601,6 @@ object OmnipeakModelToPeaks {
         val n = singleModeCandidates.get()
         return if (n == 0) 0 else singleModeLength.get() / n
     }
-
 
     /**
      * Summary length-weighted score for a peak.

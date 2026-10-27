@@ -10,6 +10,7 @@ import org.jetbrains.bio.genome.query.Query
 import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.coverage.BigWigBinnedCoverageQuery
 import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
+import org.jetbrains.bio.omnipeak.coverage.binnedCoverageDataFrame
 import org.jetbrains.bio.omnipeak.coverage.NormalizedBinnedCoverageQuery
 import org.jetbrains.bio.util.isAccessible
 import org.jetbrains.bio.util.reduceIds
@@ -27,7 +28,7 @@ data class OmnipeakAnalyzeFitInformation(
     override val build: String,
     val paths: List<OmnipeakDataPaths>,
     val labels: List<String>,
-    override val explicitFormat: InputFormat?,
+    val explicitFormat: InputFormat?,
     override val fragment: Fragment,
     override val unique: Boolean,
     override val binSize: Int,
@@ -77,7 +78,7 @@ data class OmnipeakAnalyzeFitInformation(
 
     override fun prepareData() {
         if (binnedCoverageQueries == null) {
-            val pathsPresent = paths.all { it.treatment.isAccessible() && it.control?.isAccessible() != false }
+            val pathsPresent = paths.isNotEmpty() && paths.all { it.treatment.isAccessible() && it.control?.isAccessible() != false }
             if (pathsPresent) {
                 binnedCoverageQueries = paths.map {
                     BinnedCoverageQuery.create(
@@ -99,7 +100,7 @@ data class OmnipeakAnalyzeFitInformation(
 
     override fun scoresAvailable(): Boolean {
         prepareData()
-        return binnedCoverageQueries != null
+        return !binnedCoverageQueries.isNullOrEmpty()
     }
 
     /**

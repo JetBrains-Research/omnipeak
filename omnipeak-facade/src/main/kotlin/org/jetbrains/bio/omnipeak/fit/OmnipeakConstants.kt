@@ -1,8 +1,8 @@
 package org.jetbrains.bio.omnipeak.fit
 
-import org.jetbrains.bio.omnipeak.OmnipeakCLA
 import org.jetbrains.bio.omnipeak.peaks.MultipleTesting
 import org.jetbrains.bio.viktor.F64Array
+import org.slf4j.LoggerFactory
 import java.lang.reflect.Modifier
 import kotlin.math.ln
 
@@ -11,6 +11,10 @@ import kotlin.math.ln
  * Those, configurable from command line interface, have "DEFAULT" in their names.
  */
 object OmnipeakConstants {
+    private val LOG = LoggerFactory.getLogger(OmnipeakConstants::class.java)
+
+    const val MODEL_EXT = "omni"
+
     /**
      * Default bin size used for binned centered reads coverage aggregation.
      */
@@ -93,10 +97,15 @@ object OmnipeakConstants {
 
     // Max gap to compute fragmentation,
     // i.e. reduction of candidate number when merging with gap
-    const val OMNIPEAK_FRAGMENTATION_MAX_GAP_BP = 5000
+    const val OMNIPEAK_FRAGMENTATION_MAX_GAP_BP = 5_000
 
-    // Multiplier used to inflate the gap estimation for the broad marks of bad quality
-    const val OMNIPEAK_FRAGMENTATION_MULTIPLIER = 2
+    /**
+     * Base window size for local background calculation (10 kb).
+     * Scaled dynamically by autocorrelation: localWindow = 10k * avgAutocorrelation.
+     */
+    const val OMNIPEAK_DEFAULT_LOCAL_WINDOW = 10_000
+
+    const val OMNIPEAK_MIN_EXPECTED_NOISE = 1e-5
 
     // When calling summits, min summit length x average single mode peak length
     const val OMNIPEAK_SUMMITS_MIN_LENGTH = 0.5
@@ -122,7 +131,7 @@ object OmnipeakConstants {
             if (Modifier.isStatic(field.modifiers) && Modifier.isFinal(field.modifiers)) {
                 field.isAccessible = true
                 val value = field.get(null) // null because it's a static field
-                OmnipeakCLA.LOG.debug("${field.name}: ${pp(value)}")
+                LOG.debug("${field.name}: ${pp(value)}")
             }
         }
     }

@@ -7,7 +7,6 @@ import org.jetbrains.bio.genome.coverage.Fragment
 import org.jetbrains.bio.genome.format.ReadsFormat
 import org.jetbrains.bio.genome.query.Query
 import org.jetbrains.bio.genome.query.ReadsQuery
-import org.jetbrains.bio.omnipeak.coverage.NormalizedCoverageQuery.Companion.analyzeCoverage
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_BETA_STEP
 import org.jetbrains.bio.util.deleteIfExists
 import org.jetbrains.bio.util.isAccessible

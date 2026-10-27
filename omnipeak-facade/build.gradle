@@ -1,0 +1,56 @@
+buildscript {
+    ext.kotlin_version = "2.2.0"
+
+    repositories {
+        if (project.hasProperty("buildCounter") || (System.getenv("TEAMCITY_VERSION") != null)) {
+            maven { url("https://cache-redirector.jetbrains.com/maven-central") }
+            maven { url("https://cache-redirector.jetbrains.com/plugins.gradle.org/m2") }
+        } else {
+            mavenCentral()
+            maven { url("https://plugins.gradle.org/m2") }
+        }
+    }
+
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+apply plugin: "kotlin"
+
+sourceCompatibility = 21
+targetCompatibility = sourceCompatibility
+compileKotlin { kotlinOptions.jvmTarget = sourceCompatibility }
+compileTestKotlin { kotlinOptions.jvmTarget = sourceCompatibility }
+
+if (rootProject == project) {
+    repositories {
+        if (project.hasProperty("buildCounter") || (System.getenv("TEAMCITY_VERSION") != null)) {
+            maven { url("https://cache-redirector.jetbrains.com/maven-central") }
+            maven { url("https://cache-redirector.jetbrains.com/plugins.gradle.org/m2") }
+        } else {
+            mavenCentral()
+            maven { url("https://plugins.gradle.org/m2") }
+        }
+    }
+}
+
+configurations {
+    testOutput.extendsFrom(testImplementation)
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlin_version")
+
+    implementation("org.slf4j:slf4j-api:2.0.12")
+    implementation("org.jetbrains.bio:viktor:2.0.0")
+
+    implementation project(":bioinf-commons")
+    testImplementation project(path: ":bioinf-commons", configuration: "testOutput")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlin:kotlin-test:$kotlin_version")
+
+    testOutput sourceSets.main.output, sourceSets.test.output
+}

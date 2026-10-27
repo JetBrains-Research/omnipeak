@@ -5,3 +5,4 @@ pluginManagement {
 }
 
 include ":bioinf-commons"
+include ":omnipeak-facade"

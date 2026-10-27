@@ -17,6 +17,7 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.MultipleTesting
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks
 import org.jetbrains.bio.omnipeak.peaks.Peak
+import org.jetbrains.bio.omnipeak.peaks.savePeaks
 import org.jetbrains.bio.util.*
 import org.slf4j.event.Level
 import java.nio.file.Path

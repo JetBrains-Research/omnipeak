@@ -2,8 +2,12 @@ package org.jetbrains.bio.omnipeak.peaks
 
 import org.apache.commons.math3.stat.correlation.PearsonsCorrelation
 import org.apache.commons.math3.util.Precision
+import org.jetbrains.bio.genome.GenomeQuery
+import org.jetbrains.bio.genome.containers.LocationsMergingList
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_AUTOCORRELATION_MAX_SHIFT
-import java.util.*
+import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
+import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
+import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getLogNullPvals
 import kotlin.math.min
 
 object AutoCorrelations {
@@ -25,16 +29,29 @@ object AutoCorrelations {
         return distanceCorrelations
     }
 
+    fun avgAutocorrelation(
+        fitResults: OmnipeakFitResults,
+        fitInfo: OmnipeakFitInformation = fitResults.fitInfo,
+        genomeQuery: GenomeQuery = fitInfo.genomeQuery(),
+        blackList: LocationsMergingList? = null
+    ): Double {
+        val logNullPvals = getLogNullPvals(genomeQuery, fitResults, blackList)
+        if (logNullPvals.size < 2) {
+            return 0.0
+        }
+        val correlations = computeAutoCorrelations(logNullPvals)
+        val avg = correlations.average()
+        return if (avg.isFinite()) avg.coerceIn(0.0, 1.0) else 0.0
+    }
+
     private fun computeAutocorrelation(values: DoubleArray, d: Int): Double {
-        val original = DoubleArray(values.size - d - 1)
-        System.arraycopy(values, 0, original, 0, values.size - d - 1)
-        val shifted = DoubleArray(values.size - d - 1)
-        System.arraycopy(values, d, shifted, 0, values.size - d - 1)
-        Arrays.fill(shifted, values.size - d - 1, shifted.size, 0.0)
-        var correlation = if (original.size >= 2)
-            PearsonsCorrelation().correlation(original, shifted)
-        else
-            0.0
+        val len = values.size - d
+        if (len < 2) return 0.0
+        val original = DoubleArray(len)
+        System.arraycopy(values, 0, original, 0, len)
+        val shifted = DoubleArray(len)
+        System.arraycopy(values, d, shifted, 0, len)
+        var correlation = PearsonsCorrelation().correlation(original, shifted)
         // Safeguard against NaN from Pearson correlation for zero or small vectors,
         // See example at: https://github.com/JetBrains-Research/span/issues/34
         if (correlation.isNaN() || !correlation.isFinite()) {

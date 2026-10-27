@@ -8,8 +8,9 @@ import org.jetbrains.bio.genome.Range
 import org.jetbrains.bio.genome.containers.GenomeMap
 import org.jetbrains.bio.genome.containers.genomeMap
 import org.jetbrains.bio.genome.containers.toRangeMergingList
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_FDR
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_GAP
-import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MULTIPLIER
+import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_FRAGMENTATION_MAX_GAP_BP
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_MIN_SENSITIVITY
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SENSITIVITY_N
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
@@ -38,12 +39,135 @@ object SensitivityGap {
         val sensitivities: DoubleArray,
         val candidatesNs: IntArray,
         val candidatesALs: DoubleArray,
-        val st: PepInfo? = null,
+        val pepInfo: PepInfo? = null,
         val totals: IntArray? = null,
         val news: IntArray? = null,
         val minAdditionalIdx: Int? = null,
         val minAdditionalSensitivity: Double? = null,
     )
+
+    /**
+     * Result of sensitivity and gap estimation.
+     *
+     * @property sensitivity sensitivity for candidate selection.
+     * @property gap gap size used to merge adjacent candidates.
+     * @property avgAutocorrelation broad index (autocorrelation of posterior error probabilities).
+     * @property sensitivityInfo detailed information collected during sensitivity estimation.
+     * @property candidateGapNs candidate counts evaluated across tested gap sizes.
+     */
+    @Suppress("ArrayInDataClass")
+    data class SensitivityGapResult(
+        val sensitivity: Double,
+        val gap: Int,
+        val avgAutocorrelation: Double = 0.0,
+        val sensitivityInfo: SensitivityInfo = SensitivityInfo(doubleArrayOf(), intArrayOf(), doubleArrayOf()),
+        val candidateGapNs: IntArray = intArrayOf()
+    )
+
+    fun estimateSensitivityAndGap(
+        genomeQuery: GenomeQuery,
+        omnipeakFitResults: OmnipeakFitResults,
+        logNullMembershipsMap: GenomeMap<F64Array>,
+        bitList2reuseMap: GenomeMap<BitList>,
+        fdr: Double = OMNIPEAK_DEFAULT_FDR,
+        sensitivityCmdArg: Double? = null,
+        gapCmdArg: Int? = null,
+        summits: Boolean = false,
+        parallel: Boolean = true,
+        name: String? = null,
+        cancellableState: CancellableState? = null
+    ): SensitivityGapResult {
+        val fitInfo = omnipeakFitResults.fitInfo
+        val avgAutocorrelation = AutoCorrelations.avgAutocorrelation(omnipeakFitResults, fitInfo, genomeQuery)
+        LOG.info("${name?.let { "$it " } ?: ""}Broad index (average PEP autocorrelation): ${
+            "%.3f".format(
+                avgAutocorrelation
+            )
+        }")
+        // Estimate sensitivity
+        val sensitivityInfo = estimateSensitivity(
+            genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
+            parallel, name, cancellableState
+        )
+        val beforeMergeIdx = if (sensitivityCmdArg == null) sensitivityInfo.pepInfo?.beforeMerge else null
+        val mergeSensitivity = if (beforeMergeIdx != null && beforeMergeIdx in sensitivityInfo.sensitivities.indices)
+            sensitivityInfo.sensitivities[beforeMergeIdx] else null
+        if (mergeSensitivity != null) {
+            LOG.debug("${name?.let { "$it " } ?: ""}Estimated merge sensitivity: ${"%.3f".format(mergeSensitivity)}")
+        }
+        val minAdditionalSensitivity =
+            if (sensitivityCmdArg == null) sensitivityInfo.minAdditionalSensitivity else null
+        if (minAdditionalSensitivity != null) {
+            LOG.debug("${name?.let { "$it " } ?: ""}Estimated stable sensitivity ${
+                "%.3f".format(minAdditionalSensitivity)}")
+        }
+        val logFdr = ln(fdr)
+        val sensitivity = when {
+            sensitivityCmdArg != null -> {
+                LOG.info("${name?.let { "$it " } ?: ""}Using command line sensitivity")
+                sensitivityCmdArg
+            }
+
+            minAdditionalSensitivity != null -> {
+                val mergedSensitivity = computeMergedSensitivity(
+                    avgAutocorrelation,
+                    minAdditionalSensitivity,
+                    logFdr
+                )
+                if (mergedSensitivity != minAdditionalSensitivity) {
+                    LOG.info(
+                        "${name?.let { "$it " } ?: ""}Merged sensitivity (${"%.3f".format(minAdditionalSensitivity)} + ${"%.3f".format(logFdr)}): ${"%.3f".format(mergedSensitivity)}"
+                    )
+                } else {
+                    LOG.info("${name?.let { "$it " } ?: ""}Using estimated sensitivity")
+                }
+                mergedSensitivity
+            }
+
+            else -> {
+                LOG.info("${name?.let { "$it " } ?: ""}Using FDR sensitivity ${"%.3f".format(logFdr)}")
+                logFdr
+            }
+        }
+
+        // Estimate gap
+        val (estimatedGap, candidateGapNs) = if (summits && gapCmdArg == null) {
+            0 to intArrayOf()
+        } else {
+            estimateGap(
+                genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap,
+                if (minAdditionalSensitivity != null) minAdditionalSensitivity else sensitivity,
+                parallel = parallel,
+                avgAutocorrelation = avgAutocorrelation
+            )
+        }
+        val gap = when {
+            gapCmdArg != null -> {
+                LOG.info("${name?.let { "$it " } ?: ""}Using command line gap")
+                gapCmdArg
+            }
+
+            summits -> {
+                LOG.info("${name?.let { "$it " } ?: ""}Using no gap for summits")
+                0
+            }
+
+            else -> {
+                LOG.info("${name?.let { "$it " } ?: ""}Using estimated gap")
+                estimatedGap
+            }
+        }
+
+        LOG.info("${name?.let { "$it " } ?: ""}Sensitivity: ${"%.3f".format(sensitivity)}")
+        LOG.info("${name?.let { "$it " } ?: ""}Gap: $gap")
+        return SensitivityGapResult(
+            sensitivity = sensitivity,
+            gap = gap,
+            avgAutocorrelation = avgAutocorrelation,
+            sensitivityInfo = sensitivityInfo,
+            candidateGapNs = candidateGapNs
+        )
+    }
 
     fun estimateSensitivity(
         genomeQuery: GenomeQuery,
@@ -56,7 +180,7 @@ object SensitivityGap {
     ): SensitivityInfo {
         cancellableState?.checkCanceled()
 
-        OmnipeakModelToPeaks.LOG.debug("${name ?: ""} Analyzing candidates by sensitivities...")
+        LOG.debug("${name ?: ""} Analyzing candidates by sensitivities...")
         val (sensitivities, candidatesNs, candidatesALs) = getSensitivitiesAndCandidatesCharacteristics(
             genomeQuery,
             omnipeakFitResults,
@@ -66,7 +190,7 @@ object SensitivityGap {
         val st = detectSensitivityTriangle(sensitivities, candidatesNs, candidatesALs)
         cancellableState?.checkCanceled()
         if (st != null) {
-            OmnipeakModelToPeaks.LOG.debug("${name ?: ""} Analyzing candidates additive numbers...")
+            LOG.debug("${name ?: ""} Analyzing candidates additive numbers...")
             val sensitivitiesLimited =
                 sensitivities.slice(st.beforeMerge until st.stable).toDoubleArray()
             val (totals, news) = analyzeAdditiveCandidates(
@@ -81,18 +205,58 @@ object SensitivityGap {
                 .map { news[it].toDouble() / totals[it].toDouble() }
             val minAdditionalIdx = newCandidatesList.indices.minByOrNull { newCandidatesList[it] }!!
             val minAdditionalSensitivity = sensitivitiesLimited[minAdditionalIdx]
-            OmnipeakModelToPeaks.LOG.debug(
+            LOG.debug(
                 "${name ?: ""} " +
                         "Minimal additional ${st.beforeMerge + minAdditionalIdx}: $minAdditionalSensitivity"
             )
-            return SensitivityInfo(sensitivities, candidatesNs, candidatesALs,
-                st, totals, news, minAdditionalIdx, minAdditionalSensitivity)
+            return SensitivityInfo(
+                sensitivities, candidatesNs, candidatesALs,
+                st, totals, news, minAdditionalIdx, minAdditionalSensitivity
+            )
         } else {
-            OmnipeakModelToPeaks.LOG.error("${name ?: ""} Failed to estimate sensitivity, using defaults.")
+            LOG.error("${name ?: ""} Failed to estimate sensitivity, using defaults.")
             return SensitivityInfo(sensitivities, candidatesNs, candidatesALs)
         }
     }
 
+
+    /**
+     * Interpolates sensitivity between [stricterSensitivity] and [stableSensitivity] using [avgAutocorrelation]
+     * (broadness index).
+     *
+     * The track's broadness index ([avgAutocorrelation]) governs the interpolation:
+     * - Narrow marks (low autocorrelation, ~0.0) shift sensitivity toward [stricterSensitivity] (e.g. logFdr).
+     * - Broad marks (high autocorrelation, ~1.0) keep more of original [stableSensitivity] (minAdditionalSensitivity).
+     */
+    fun interpolateSensitivity(
+        avgAutocorrelation: Double,
+        stricterSensitivity: Double,
+        stableSensitivity: Double
+    ): Double {
+        val broadness = avgAutocorrelation.coerceIn(0.0, 1.0)
+        return stricterSensitivity + (stableSensitivity - stricterSensitivity) * broadness
+    }
+
+    /**
+     * Computes merged main sensitivity combining stable sensitivity ([minAdditionalSensitivity]) and [logFdr]
+     * using [avgAutocorrelation] interpolation.
+     *
+     * When [logFdr] is stricter than stable sensitivity, narrow marks shift toward [logFdr],
+     * whereas broad domains remain close to stable sensitivity.
+     */
+    fun computeMergedSensitivity(
+        avgAutocorrelation: Double,
+        minAdditionalSensitivity: Double?,
+        logFdr: Double
+    ): Double {
+        if (minAdditionalSensitivity == null) {
+            return logFdr
+        }
+        if (logFdr >= minAdditionalSensitivity) {
+            return minAdditionalSensitivity
+        }
+        return interpolateSensitivity(avgAutocorrelation, logFdr, minAdditionalSensitivity)
+    }
 
     fun linSpace(min: Double, max: Double, n: Int): DoubleArray {
         // If we use linear space here, we can't see the plots with merge
@@ -211,10 +375,12 @@ object SensitivityGap {
 
 
     /**
-     * Estimates the gap to merge fragmented candidates, gently compensating for low-quality
-     * broad marks without any tunable threshold.
+     * Estimates the gap to merge fragmented candidates for a given sensitivity.
      *
-     * As the merge gap grows, the number of candidates [candidatesNs] declines as adjacent
+     * Gap merging compensates for local fragmentation in broad chromatin domains, where dips in
+     * coverage split a single continuous region into multiple pieces.
+     *
+     * As gap increases from 0, the number of candidate intervals N(gap) declines because adjacent
      * candidates join. The *shape* of that decline in log space tells narrow from broad marks:
      *
      * - Narrow marks (e.g. H3K27ac) merge at a roughly constant relative rate, so `ln(N)` falls
@@ -224,18 +390,19 @@ object SensitivityGap {
      *   and the merge rate decelerates, so `ln(N)` bows below the straight chord connecting its
      *   ends. The more pronounced that convexity, the larger the gap.
      *
-     * The gap is that log-space convexity - the area between the chord and the `ln(N)` curve,
-     * normalized by the total log decline. A pure exponential decline (narrow) yields ~0 by
-     * construction, while the measure grows naturally with fragmentation (broad). No magic
-     * threshold is involved, and the value is bounded by the examined window.
-     *
-     * Additional multiplier [OMNIPEAK_FRAGMENTATION_MULTIPLIER]
-     * allows to inflate the bad quality fragmentation, yet keeping the narrow gap ~ 0.
+     * Combines empirical fragmentation curvature (the area between the chord and the `ln(N)` curve
+     * normalized by the total log decline) with the spatial autocorrelation correlation length scale:
+     *   correlationLength = -1 / ln(broadness)
+     *   gap = empiricalGap * broadness + correlationLength * broadness^2
      *
      * @param candidatesNs Numbers of candidates by gap to use for the gap estimation.
+     * @param avgAutocorrelation Average autocorrelation of posterior error probabilities in [0.0, 1.0].
      * @return An integer representing the gap.
      */
-    fun estimateGap(candidatesNs: IntArray): Int {
+    fun estimateGap(
+        candidatesNs: IntArray,
+        avgAutocorrelation: Double = 0.0
+    ): Int {
         val n = candidatesNs.size
         if (n < 2) return OMNIPEAK_DEFAULT_GAP
         // Laplace-smoothed (+1) log counts, robust for small candidate numbers
@@ -243,13 +410,99 @@ object SensitivityGap {
         val totalDecline = logNs.first() - logNs.last()
         // Curve doesn't decline (no merging at all) - nothing to compensate.
         if (totalDecline <= 0.0) return OMNIPEAK_DEFAULT_GAP
-        // Mutliplier to get bigger compensation for bad-quality cases
-        val convexity = OMNIPEAK_FRAGMENTATION_MULTIPLIER * (0 until n).sumOf { i ->
-            val chord = logNs.first() + (logNs.last() - logNs.first()) * i / (n - 1)
-            chord - logNs[i]
-        } / totalDecline - OMNIPEAK_FRAGMENTATION_MULTIPLIER
-        // Subtract to get minimal values for good-quality narrow cases
-        return convexity.roundToInt().coerceIn(OMNIPEAK_DEFAULT_GAP, n - 1)
+        val chordSum = (logNs.first() + logNs.last()) * n / 2.0
+        val curveSum = logNs.sum()
+        val area = chordSum - curveSum
+        if (area <= 0.0) return OMNIPEAK_DEFAULT_GAP
+        val broadness = avgAutocorrelation.coerceIn(0.0, 1.0)
+        val correlationLength = if (broadness > 0.0 && broadness < 1.0) {
+            min(n.toDouble(), -1.0 / ln(broadness))
+        } else if (broadness >= 1.0) {
+            n.toDouble()
+        } else {
+            0.0
+        }
+        val empiricalGap = area / totalDecline
+        val gap = (empiricalGap * broadness + correlationLength * broadness.pow(2)).roundToInt()
+        return gap.coerceIn(OMNIPEAK_DEFAULT_GAP, n - 1)
+    }
+
+    /**
+     * Estimates candidate numbers for gaps 0..[maxGap] in a single pass over chromosomes at gap=0.
+     *
+     * Adjacent candidate intervals [s_k, e_k] and [s_{k+1}, e_{k+1}] merge under aggregate(gap)
+     * iff (s_{k+1} - e_k) <= gap. Each merged adjacent pair reduces the total candidate count by 1.
+     * Therefore, collecting the histogram of adjacent gap distances allows computing N(g) for all
+     * gap values directly in O(total candidates) instead of scanning the full genome for every gap.
+     */
+    fun estimateCandidateGapNs(
+        genomeQuery: GenomeQuery,
+        fitInfo: OmnipeakFitInformation,
+        logNullMembershipsMap: GenomeMap<F64Array>,
+        bitList2reuseMap: GenomeMap<BitList>,
+        sensitivity: Double,
+        maxGap: Int = OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize,
+        parallel: Boolean = true
+    ): IntArray {
+        val totalDistanceCounts = IntArray(maxGap + 1)
+        val totalCandidates0 = java.util.concurrent.atomic.AtomicInteger(0)
+
+        genomeQuery.get().map { chromosome ->
+            Callable {
+                if (!fitInfo.containsChromosomeInfo(chromosome)) {
+                    return@Callable
+                }
+                val logNullMemberships = logNullMembershipsMap[chromosome]
+                val bitList2reuse = bitList2reuseMap[chromosome]
+                val candidates = getChromosomeCandidates(
+                    chromosome, logNullMemberships, bitList2reuse, sensitivity, 0
+                )
+                if (candidates.isEmpty()) {
+                    return@Callable
+                }
+                totalCandidates0.addAndGet(candidates.size)
+                val localDistanceCounts = IntArray(maxGap + 1)
+                for (i in 0 until candidates.size - 1) {
+                    val dist = candidates[i + 1].startOffset - candidates[i].endOffset
+                    if (dist in 1..maxGap) {
+                        localDistanceCounts[dist]++
+                    }
+                }
+                synchronized(totalDistanceCounts) {
+                    for (i in 1..maxGap) {
+                        totalDistanceCounts[i] += localDistanceCounts[i]
+                    }
+                }
+            }
+        }.await(parallel)
+
+        val candidateGapNs = IntArray(maxGap + 1)
+        candidateGapNs[0] = totalCandidates0.get()
+        for (g in 1..maxGap) {
+            candidateGapNs[g] = candidateGapNs[g - 1] - totalDistanceCounts[g]
+        }
+        return candidateGapNs
+    }
+
+    /**
+     * Estimates the gap to merge fragmented candidates for a given sensitivity,
+     * returning both the optimal gap and the candidate counts array by gap.
+     */
+    fun estimateGap(
+        genomeQuery: GenomeQuery,
+        fitInfo: OmnipeakFitInformation,
+        logNullMembershipsMap: GenomeMap<F64Array>,
+        bitList2reuseMap: GenomeMap<BitList>,
+        sensitivity: Double,
+        maxGap: Int = OMNIPEAK_FRAGMENTATION_MAX_GAP_BP / fitInfo.binSize,
+        parallel: Boolean = true,
+        avgAutocorrelation: Double = 0.0
+    ): Pair<Int, IntArray> {
+        val candidateGapNs = estimateCandidateGapNs(
+            genomeQuery, fitInfo, logNullMembershipsMap, bitList2reuseMap, sensitivity, maxGap, parallel
+        )
+        val gap = estimateGap(candidateGapNs, avgAutocorrelation)
+        return Pair(gap, candidateGapNs)
     }
 
 
@@ -293,8 +546,8 @@ object SensitivityGap {
             candidatesNs[it] == candidatesNs.last()
         }.count()
         if (equalTail <= 5) {
-            if (OmnipeakModelToPeaks.LOG.isDebugEnabled) {
-                OmnipeakModelToPeaks.LOG.debug("Sensitivity table")
+            if (LOG.isDebugEnabled) {
+                LOG.debug("Sensitivity table")
                 println("Sensitivity\tCandidatesN\tCandidatesAL")
                 for (i in sensitivities.indices) {
                     println("${sensitivities[i]}\t${candidatesNs[i]}\t${candidatesALs[i]}")

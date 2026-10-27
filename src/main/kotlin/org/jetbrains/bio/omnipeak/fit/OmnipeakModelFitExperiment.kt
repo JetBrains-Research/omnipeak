@@ -11,6 +11,7 @@ import org.jetbrains.bio.genome.query.ReadsQuery
 import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.SPAN2.toOmnipeak
 import org.jetbrains.bio.omnipeak.fit.OmnipeakModelFitExperiment.Companion.loadResults
+import org.jetbrains.bio.omnipeak.peaks.AutoCorrelations
 import org.jetbrains.bio.statistics.Preprocessed
 import org.jetbrains.bio.statistics.f64Array
 import org.jetbrains.bio.statistics.hypothesis.NullHypothesis
@@ -213,7 +214,9 @@ abstract class OmnipeakModelFitExperiment<
                 }
 
                 val logNullMembershipsMap = fitInformation.split(logNullMembershipsDF, genomeQuery)
-                computedResults = OmnipeakFitResults(fitInformation, model, logNullMembershipsMap, statesDataFrameMap)
+                computedResults = OmnipeakFitResultsImpl(fitInformation, model, logNullMembershipsMap, statesDataFrameMap)
+                val avgAutocorrelation = AutoCorrelations.avgAutocorrelation(computedResults!!, fitInformation, genomeQuery)
+                LOG.info("Model average autocorrelation: ${"%.3f".format(avgAutocorrelation)}")
             }
         }
         return if (computedResults != null) {
@@ -341,32 +344,44 @@ abstract class OmnipeakModelFitExperiment<
             modelPath: Path
         ): OmnipeakFitResults {
             LOG.debug("Loading model: {}", modelPath)
-            return withTempDirectory(modelPath.stem) { dir ->
-                LOG.debug("Started model file decompress: ${modelPath.stem}")
-                Tar.decompress(modelPath, dir.toFile())
+            val currentContextClassLoader = Thread.currentThread().contextClassLoader
+            val omnipeakClassLoader = OmnipeakModelFitExperiment::class.java.classLoader
+            val switchClassLoader = currentContextClassLoader != null && currentContextClassLoader != omnipeakClassLoader
+            if (switchClassLoader) {
+                Thread.currentThread().contextClassLoader = omnipeakClassLoader
+            }
+            try {
+                return withTempDirectory(modelPath.stem) { dir ->
+                    LOG.debug("Started model file decompress: ${modelPath.stem}")
+                    Tar.decompress(modelPath, dir.toFile())
 
-                LOG.debug("Completed model file decompress and started loading: ${modelPath.stem}")
-                val info = OmnipeakFitInformation.load<OmnipeakFitInformation>(
-                    toOmnipeak((dir / INFORMATION_JSON).bufferedReader().readText())
-                )
-                checkNotNull(info) { "Failed to load model information" }
-                // Check genome build
-                genomeQuery?.let { info.checkGenome(it.genome) }
-                // Load model and PEPs
-                val model = ClassificationModel.load<ClassificationModel>(
-                    toOmnipeak((dir / MODEL_JSON).bufferedReader().readText())
-                )
-                checkNotNull(model) { "Failed to load model from file" }
-                val logNullMembershipsDF = DataFrame.load(dir / NULL_NPZ)
-                val logNullMembershipsMap = info.split(logNullMembershipsDF, genomeQuery)
-                var statesDfMap: Map<String, DataFrame>? = null
-                val statesPath = dir / "states.npz"
-                LOG.debug("Loading states data frame ${modelPath.stem}")
-                if (statesPath.exists) {
-                    statesDfMap = info.split(DataFrame.load(statesPath), genomeQuery)
+                    LOG.debug("Completed model file decompress and started loading: ${modelPath.stem}")
+                    val info = OmnipeakFitInformation.load<OmnipeakFitInformation>(
+                        toOmnipeak((dir / INFORMATION_JSON).bufferedReader().readText())
+                    )
+                    checkNotNull(info) { "Failed to load model information" }
+                    // Check genome build
+                    genomeQuery?.let { info.checkGenome(it.genome) }
+                    // Load model and PEPs
+                    val model = ClassificationModel.load<ClassificationModel>(
+                        toOmnipeak((dir / MODEL_JSON).bufferedReader().readText())
+                    )
+                    checkNotNull(model) { "Failed to load model from file" }
+                    val logNullMembershipsDF = DataFrame.load(dir / NULL_NPZ)
+                    val logNullMembershipsMap = info.split(logNullMembershipsDF, genomeQuery)
+                    var statesDfMap: Map<String, DataFrame>? = null
+                    val statesPath = dir / "states.npz"
+                    LOG.debug("Loading states data frame ${modelPath.stem}")
+                    if (statesPath.exists) {
+                        statesDfMap = info.split(DataFrame.load(statesPath), genomeQuery)
+                    }
+                    LOG.debug("Completed loading model: ${modelPath.stem}")
+                    OmnipeakFitResultsImpl(info, model, logNullMembershipsMap, statesDfMap)
                 }
-                LOG.debug("Completed loading model: ${modelPath.stem}")
-                return@withTempDirectory OmnipeakFitResults(info, model, logNullMembershipsMap, statesDfMap)
+            } finally {
+                if (switchClassLoader) {
+                    Thread.currentThread().contextClassLoader = currentContextClassLoader
+                }
             }
         }
     }

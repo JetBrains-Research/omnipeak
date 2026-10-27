@@ -219,6 +219,73 @@ class OmnipeakFitInformationTest {
     }
 
     @Test
+    fun checkBackwardCompatibility() {
+        listOf(
+            "org.jetbrains.bio.span.fit.SpanAnalyzeFitInformation",
+            "org.jetbrains.bio.span.fit.AnalyzeFitInformation",
+            "org.jetbrains.bio.span.AnalyzeFitInformation",
+            "org.jetbrains.bio.experiments.fit.SpanAnalyzeFitInformation",
+            "org.jetbrains.bio.experiments.fit.AnalyzeFitInformation",
+            "AnalyzeFitInformation",
+            "SpanAnalyzeFitInformation"
+        ).forEach { fqn ->
+            withTempFile("foo", ".tar") { path ->
+                path.bufferedWriter().use {
+                    it.write(
+                        """{
+  "build": "to1",
+  "paths": [],
+  "labels": [],
+  "fragment": "auto",
+  "bin_size": 200,
+  "unique": false,
+  "regress_control": true,
+  "chromosomes_sizes": {},
+  "fit.information.fqn": "$fqn",  
+  "version": 5
+}"""
+                    )
+                }
+                val info = OmnipeakFitInformation.load<OmnipeakFitInformation>(toOmnipeak(path.bufferedReader().readText()))
+                org.junit.Assert.assertNotNull("Failed for $fqn", info)
+                org.junit.Assert.assertTrue(info is OmnipeakAnalyzeFitInformation)
+            }
+        }
+    }
+
+    @Test
+    fun checkClassLoaderIsolation() {
+        val original = Thread.currentThread().contextClassLoader
+        try {
+            // Set context class loader to platform class loader where Omnipeak is not available
+            Thread.currentThread().contextClassLoader = ClassLoader.getPlatformClassLoader()
+            withTempFile("foo", ".tar") { path ->
+                path.bufferedWriter().use {
+                    it.write(
+                        """{
+  "build": "to1",
+  "paths": [],
+  "labels": [],
+  "fragment": "auto",
+  "bin_size": 200,
+  "unique": false,
+  "regress_control": true,
+  "chromosomes_sizes": {},
+  "fit.information.fqn": "org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation",  
+  "version": 5
+}"""
+                    )
+                }
+                val info = OmnipeakFitInformation.load<OmnipeakFitInformation>(toOmnipeak(path.bufferedReader().readText()))
+                org.junit.Assert.assertNotNull(info)
+                org.junit.Assert.assertTrue(info is OmnipeakAnalyzeFitInformation)
+            }
+        } finally {
+            Thread.currentThread().contextClassLoader = original
+        }
+    }
+
+    @Test
     fun checkIndices() {
         val info = OmnipeakAnalyzeFitInformation(
             gq, emptyList(), emptyList(), null, FixedFragment(100), true, 200, true

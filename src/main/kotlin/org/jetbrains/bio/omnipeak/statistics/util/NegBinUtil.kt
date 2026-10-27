@@ -1,5 +1,7 @@
 package org.jetbrains.bio.omnipeak.statistics.util
 
+import org.apache.commons.math3.special.Beta
+import org.apache.commons.math3.special.Gamma
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_ESTIMATE_SNR
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_HMM_LOW_THRESHOLD
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_HMM_ESTIMATE_LOW
@@ -8,7 +10,10 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_HMM_NB_VAR_MEAN
 import org.jetbrains.bio.statistics.average
 import org.jetbrains.bio.statistics.distribution.NegativeBinomialDistribution.Companion.estimateFailuresUsingMoments
 import org.jetbrains.bio.statistics.standardDeviation
+import org.jetbrains.bio.viktor.logAddExp
 import org.slf4j.LoggerFactory
+import kotlin.math.abs
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
 
@@ -86,5 +91,57 @@ object NegBinUtil {
             lowMin = lowMin,
             signalToNoise = snrMin
         )
+    }
+
+    /**
+     * Negative Binomial CDF evaluator for upper tail P(X >= k) in log space.
+     * @param k observation count
+     * @param mu expected mean background
+     * @param r number of failures (overdispersion parameter)
+     * @return log(p-value) = ln P(X >= k)
+     */
+    fun logNegBinCdf(
+        k: Int,
+        mu: Double,
+        r: Double,
+        maxM: Int = 10_000,
+        epsilon: Double = 1e-5
+    ): Double {
+        if (k <= 0) return 0.0
+        if (mu <= 0.0) return Double.NEGATIVE_INFINITY
+        if (r.isInfinite() || r <= 0.0 || r > 1e6) {
+            return PoissonUtil.logPoissonCdf(k - 1, mu, maxM, epsilon)
+        }
+        val p = mu / (mu + r)
+        if (p <= 0.0) return Double.NEGATIVE_INFINITY
+        if (p >= 1.0) return 0.0
+
+        val betaProb = try {
+            Beta.regularizedBeta(p, k.toDouble(), r)
+        } catch (_: Exception) {
+            0.0
+        }
+        if (betaProb > 1e-15) {
+            return ln(betaProb)
+        }
+
+        val lnP = ln(p)
+        val ln1MinusP = ln(r / (mu + r))
+
+        // Initial log probability for X = k
+        var logX = Gamma.logGamma(k + r) - PoissonUtil.logFactorial(k) - Gamma.logGamma(r) +
+                r * ln1MinusP + k * lnP
+        var residue = logX
+
+        for (i in k + 1..k + maxM) {
+            val logY = logX + ln(i - 1 + r) - PoissonUtil.lnTab(i) + lnP
+            val preResidue = residue
+            residue = preResidue logAddExp logY
+            if (abs(preResidue - residue) < epsilon) {
+                break
+            }
+            logX = logY
+        }
+        return residue
     }
 }

@@ -10,6 +10,7 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_CLIP_MAX_LENGTH
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_CLIP_STEPS
 import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
+import org.jetbrains.bio.omnipeak.fit.offsets
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.LOG
 import org.jetbrains.bio.util.await
 import java.util.concurrent.Callable

@@ -3,6 +3,21 @@ OmniPeak Changelog
 
 Here you can see the full list of changes between each release.
 
+Version 1.6
+--------------------
+
+Released on October XXth, 2026
+
+- Broadness-adaptive sensitivity: adaptively interpolates sensitivity with FDR cutoff (ln(FDR)) based on spatial autocorrelation
+- Autocorrelation-guided gap estimation: assigns larger gaps to broad marks based on spatial correlation length while keeping zero gap for narrow marks
+- Hybrid candidate scoring: evaluates candidate read counts against local background, control, and flanking windows using Negative Binomial and Poisson tests
+- Spatial autocorrelation correction: adjusts dispersion by effective independent bins to prevent significance inflation in broad domains
+- Fallback mean log-PEP scoring for datasets without coverage tracks
+- Performance optimizations: Ramanujan's formula for ln factorial, cached log-probabilities, and reduced allocations during HMM fitting
+- Dedicated omnipeak-facade module for JBR Genome Browser integration
+- Bug fixes and test improvements
+
+
 Version 1.5
 --------------------
 

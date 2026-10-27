@@ -10,6 +10,7 @@ import org.jetbrains.bio.genome.query.CachingQuery
 import org.jetbrains.bio.genome.query.Query
 import org.jetbrains.bio.omnipeak.InputFormat
 import org.jetbrains.bio.omnipeak.coverage.BinnedCoverageQuery
+import org.jetbrains.bio.omnipeak.coverage.binnedCoverageDataFrame
 import org.jetbrains.bio.util.reduceIds
 
 data class OmnipeakCompareFitInformation(
@@ -18,7 +19,7 @@ data class OmnipeakCompareFitInformation(
     val data2: List<OmnipeakDataPaths>,
     val labels1: List<String>,
     val labels2: List<String>,
-    override val explicitFormat: InputFormat?,
+    val explicitFormat: InputFormat?,
     override val fragment: Fragment,
     override val unique: Boolean,
     override val binSize: Int,

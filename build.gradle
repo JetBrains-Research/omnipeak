@@ -1,7 +1,7 @@
 import org.apache.tools.ant.filters.ReplaceTokens
 
 // Omnipeak application version
-version = "1.5"
+version = "1.6"
 
 buildscript {
     ext.kotlin_version = "2.2.0"
@@ -42,17 +42,21 @@ compileKotlin { kotlinOptions.jvmTarget = sourceCompatibility }
 compileTestKotlin { kotlinOptions.jvmTarget = sourceCompatibility }
 
 if (rootProject == project) {
-    repositories {
-        // On CI route through JetBrains cache-redirector to avoid Maven Central / plugin portal 429 rate limits.
-        if (project.hasProperty("buildCounter") || (System.getenv("TEAMCITY_VERSION") != null)) {
-            maven { url("https://cache-redirector.jetbrains.com/maven-central") }
-            maven { url("https://cache-redirector.jetbrains.com/plugins.gradle.org/m2") }
-        } else {
-            mavenCentral()
-            maven { url("https://plugins.gradle.org/m2") }
+    allprojects {
+        repositories {
+            // On CI route through JetBrains cache-redirector to avoid Maven Central / plugin portal 429 rate limits.
+            if (project.hasProperty("buildCounter") || (System.getenv("TEAMCITY_VERSION") != null)) {
+                maven { url("https://cache-redirector.jetbrains.com/maven-central") }
+                maven { url("https://cache-redirector.jetbrains.com/plugins.gradle.org/m2") }
+            } else {
+                mavenCentral()
+                maven { url("https://plugins.gradle.org/m2") }
+            }
         }
     }
 }
+
+def facadeProjectPath = findProject(":omnipeak-facade") != null ? ":omnipeak-facade" : ":tools:omnipeak:omnipeak-facade"
 
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version")
@@ -71,8 +75,10 @@ dependencies {
     implementation("org.jetbrains.bio:big:0.9.1")
     implementation("org.knowm.xchart:xchart:3.8.5")
 
+    implementation project(facadeProjectPath)
     implementation project(":bioinf-commons")
     testImplementation project(path: ":bioinf-commons", configuration: "testOutput")
+    testImplementation project(path: facadeProjectPath, configuration: "testOutput")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test:$kotlin_version")
@@ -95,7 +101,7 @@ test {
 
     ignoreFailures = true
     maxParallelForks = Runtime.runtime.availableProcessors()
-    maxHeapSize = "1024m"
+    maxHeapSize = "8192m"
 
     testLogging.showStandardStreams = true
 
@@ -161,6 +167,7 @@ jar {
 
 clean {
     dependsOn ":bioinf-commons:clean"
+    dependsOn "${facadeProjectPath}:clean"
 }
 
 // https://github.com/gradle/gradle/issues/5816

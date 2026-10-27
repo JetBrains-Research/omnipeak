@@ -94,12 +94,14 @@ class BigWigBinnedCoverageQuery(
         val matchedBfChr =
             findMatchedChromosome(treatmentBigWig, chrName) ?: return 0.0
 
-        // Use summarize to get coverage data for the range - one bin for the entire range
+        val length = chromosomeRange.endOffset - chromosomeRange.startOffset
+        if (length <= 0) return 0.0
+        val binsCount = max(1, (length + binSize - 1) / binSize)
         val summaries = treatmentBigWig.summarize(
-            matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, 1
+            matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, binsCount
         )
 
-        return if (summaries.isNotEmpty()) treatmentScore(summaries[0].sum) else 0.0
+        return summaries.sumOf { treatmentScore(it.value()) }
     }
 
     override fun controlAvailable(): Boolean {
@@ -116,12 +118,14 @@ class BigWigBinnedCoverageQuery(
         val matchedBfChr =
             findMatchedChromosome(controlBigWig!!, chrName) ?: return 0.0
 
-        // Use summarize to get coverage data for the range - one bin for the entire range
+        val length = chromosomeRange.endOffset - chromosomeRange.startOffset
+        if (length <= 0) return 0.0
+        val binsCount = max(1, (length + binSize - 1) / binSize)
         val summaries = controlBigWig!!.summarize(
-            matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, 1
+            matchedBfChr, chromosomeRange.startOffset, chromosomeRange.endOffset, binsCount
         )
 
-        return if (summaries.isNotEmpty()) controlScore(summaries[0].sum) else 0.0
+        return summaries.sumOf { controlScore(it.value()) }
     }
 
     override fun controlNormalizedScore(chromosomeRange: ChromosomeRange): Int {

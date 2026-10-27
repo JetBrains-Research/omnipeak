@@ -10,6 +10,11 @@ import kotlin.math.exp
 /** KDE smoothing (Gaussian) + local-maximum mode detection for 1-D signals.  */
 object KdeModeFinder {
 
+    fun kdeSmooth(signal: DoubleArray, bandwidth: Int): DoubleArray {
+        val (rad, kernel) = buildKernel(bandwidth)
+        return applyKernel(rad, kernel, signal)
+    }
+
     fun detectModes(
         signal: DoubleArray,
         bandwidth: Int,

@@ -1,5 +1,6 @@
 package org.jetbrains.bio.omnipeak.statistics.util
 
+import org.apache.commons.math3.special.Gamma
 import org.jetbrains.bio.viktor.logAddExp
 import kotlin.math.PI
 import kotlin.math.abs
@@ -53,6 +54,17 @@ object PoissonUtil {
         require(lbd > 0) {
             "Lambda should be > 0, got $lbd"
         }
+        if (k < 0) return 0.0
+
+        val gammaProb = try {
+            Gamma.regularizedGammaP((k + 1).toDouble(), lbd)
+        } catch (_: Exception) {
+            0.0
+        }
+        if (gammaProb > 1e-15) {
+            return ln(gammaProb)
+        }
+
         var residue: Double
         var logX: Double
         val lnLbd = ln(lbd)
