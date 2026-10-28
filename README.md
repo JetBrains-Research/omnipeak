@@ -58,29 +58,6 @@ Examples on Java 21:
 * Model fitting only<br>
   `java --add-modules=jdk.incubator.vector -Xmx8G -jar omnipeak.jar analyze -t ChIP.bam -c Control.bam --cs Chrom.sizes -m Model.op`
 
-Peak calling process
---------------------
-
-OmniPeak performs peak calling in the following stages:
-
-1. **Coverage Binning & Normalization**: The genome is partitioned into consecutive bins (configured by `--bin`), and read coverage is computed with optional fragment shift, duplicate filtering, and control track regression.
-2. **HMM Model Fitting**: A three-state (Zero, Low, High) Negative Binomial Hidden Markov Model is fitted to binned coverage across the genome using Expectation-Maximization (EM) to compute posterior error probabilities (PEP) for each bin:
-   - *Zero-inflated architecture*: Separates structural unmappable dropouts (Zero) from background noise (Low) and enriched signal (High).
-   - *Constrained learning & parameter guards*: Enforces signal-to-noise separation (`--hmm-snr`), background noise floor (`--hmm-low`), overdispersion regularization, and automatic state inversion recovery to prevent parameter collapse and noise degeneracy.
-3. **Adaptive Sensitivity & Gap Estimation**:
-   - *Broadness index*: Track broadness is quantified via spatial autocorrelation of posterior error probabilities (`avgAutocorrelation`).
-   - *Merged sensitivity*: Adaptively interpolates between baseline sensitivity and `ln(FDR)` according to track broadness — shifting narrow marks toward `ln(FDR)` for specificity while preserving broad domains.
-   - *Optimal gap*: Estimated from candidate curve convexity and spatial autocorrelation scale to bridge fragmented signal in broad domains (`0` when `--summits` is used).
-4. **Candidate Extraction & Summit Calling**:
-   - Candidate regions are extracted by thresholding posterior error probabilities at the merged sensitivity and merging adjacent bins within the estimated `--gap`.
-   - When `--summits` is enabled, candidate regions are decomposed into distinct summit modes using Hartigan Dip test and Gaussian Kernel Density Estimation (KDE).
-5. **Peak Scoring & FDR Control**:
-   - *Autocorrelation correction*: Adjusts Negative Binomial dispersion by effective independent bins to prevent significance inflation in broad correlated domains.
-   - *Significance testing*: Evaluates candidate read counts against local background, matched control, and global noise using Negative Binomial and Poisson tests (or mean log-PEP when coverage tracks are absent).
-   - *FDR control*: Adjusts p-values (Benjamini-Hochberg, Bonferroni) to compute q-values, filtering peaks below `--fdr` and scaling the broadPeak score.
-6. **Boundary Refinement**: Peak boundaries are fine-tuned according to local signal (`--clip`), trimming low-density tails.
-
-
 Differential peak calling
 -------------------------
 
@@ -134,6 +111,29 @@ Parameters that mostly influence peak calling results:
 * `-kd, --keep-duplicates` May significantly influence the signal-to-noise ratio in the data
 * `-f, --fdr FDR` Naturally filters detected peaks by significance
 * `--gap GAP` Gap is determined automatically, however, can be adjusted to merge adjacent peaks
+
+
+Peak calling process
+--------------------
+
+OmniPeak performs peak calling in the following stages:
+
+1. **Coverage Binning & Normalization**: The genome is partitioned into consecutive bins (configured by `--bin`), and read coverage is computed with optional fragment shift, duplicate filtering, and control track regression.
+2. **HMM Model Fitting**: A three-state (Zero, Low, High) Negative Binomial Hidden Markov Model is fitted to binned coverage across the genome using Expectation-Maximization (EM) to compute posterior error probabilities (PEP) for each bin:
+    - *Zero-inflated architecture*: Separates structural unmappable dropouts (Zero) from background noise (Low) and enriched signal (High).
+    - *Constrained learning & parameter guards*: Enforces signal-to-noise separation (`--hmm-snr`), background noise floor (`--hmm-low`), overdispersion regularization, and automatic state inversion recovery to prevent parameter collapse and noise degeneracy.
+3. **Adaptive Sensitivity & Gap Estimation**:
+    - *Broadness index*: Track broadness is quantified via spatial autocorrelation of posterior error probabilities (`avgAutocorrelation`).
+    - *Merged sensitivity*: Adaptively interpolates between baseline sensitivity and `ln(FDR)` according to track broadness — shifting narrow marks toward `ln(FDR)` for specificity while preserving broad domains.
+    - *Optimal gap*: Estimated from candidate curve convexity and spatial autocorrelation scale to bridge fragmented signal in broad domains (`0` when `--summits` is used).
+4. **Candidate Extraction & Summit Calling**:
+    - Candidate regions are extracted by thresholding posterior error probabilities at the merged sensitivity and merging adjacent bins within the estimated `--gap`.
+    - When `--summits` is enabled, candidate regions are decomposed into distinct summit modes using Hartigan Dip test and Gaussian Kernel Density Estimation (KDE).
+5. **Peak Scoring & FDR Control**:
+    - *Autocorrelation correction*: Adjusts Negative Binomial dispersion by effective independent bins to prevent significance inflation in broad correlated domains.
+    - *Significance testing*: Evaluates candidate read counts against local background, matched control, and global noise using Negative Binomial and Poisson tests (or mean log-PEP when coverage tracks are absent).
+    - *FDR control*: Adjusts p-values (Benjamini-Hochberg, Bonferroni) to compute q-values, filtering peaks below `--fdr` and scaling the broadPeak score.
+6. **Boundary Refinement**: Peak boundaries are fine-tuned according to local signal (`--clip`), trimming low-density tails.
 
 
 Build from sources
