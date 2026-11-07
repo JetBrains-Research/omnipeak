@@ -200,8 +200,7 @@ object OmnipeakResultAnalysis {
             gapCmdArg = gapCmdArg,
             summits = false,
             parallel = true,
-            name = name,
-            cancellableState = null
+            name = name
         )
         val sensitivityInfo = sensitivityGapResult.sensitivityInfo
         val sensitivities = sensitivityInfo.sensitivities

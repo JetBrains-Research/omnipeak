@@ -17,7 +17,6 @@ import org.jetbrains.bio.omnipeak.peaks.Peak
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap
 import org.jetbrains.bio.omnipeak.peaks.savePeaks
 import org.jetbrains.bio.omnipeak.statistics.hmm.NB2ZHMM
-import org.jetbrains.bio.util.CancellableState
 import org.jetbrains.bio.util.stem
 import org.jetbrains.bio.viktor.F64Array
 import java.nio.file.Path
@@ -92,16 +91,14 @@ class OmnipeakBridgeImpl : OmnipeakBridge {
         logNullMembershipsMap: GenomeMap<F64Array>,
         bitList2reuseMap: GenomeMap<BitList>,
         parallel: Boolean,
-        name: String?,
-        cancellableState: CancellableState
+        name: String?
     ): Double? = SensitivityGap.estimateSensitivity(
         genomeQuery,
         fitResults,
         logNullMembershipsMap,
         bitList2reuseMap,
         parallel,
-        name,
-        cancellableState
+        name
     ).minAdditionalSensitivity
 
     override fun estimateCandidateGapNs(
@@ -150,12 +147,11 @@ class OmnipeakBridgeImpl : OmnipeakBridge {
         bitList2reuseMap: GenomeMap<BitList>,
         fdr: Double,
         parallel: Boolean,
-        name: String?,
-        cancellableState: CancellableState
+        name: String?
     ): Pair<Double, Int> {
         val res = SensitivityGap.estimateSensitivityAndGap(
             genomeQuery, fitResults, logNullMembershipsMap, bitList2reuseMap,
-            fdr, null, null, false, parallel, name, cancellableState
+            fdr, null, null, false, parallel, name
         )
         return res.sensitivity to res.gap
     }
@@ -203,13 +199,11 @@ class OmnipeakBridgeImpl : OmnipeakBridge {
         multipleTesting: MultipleTesting,
         blacklistPath: Path?,
         name: String?,
-        parallel: Boolean,
-        cancellableState: CancellableState
+        parallel: Boolean
     ): List<Peak> = OmnipeakModelToPeaks.candidatesToPeaks(
         genomeQuery, fitInfo, logNullMembershipsMap, avgAutocorrelation,
         failures = failures, sensitivity, candidatesMap, summits, singleModeLength,
-        fdr, clip, testing = multipleTesting, blackListPath = blacklistPath, name = name, parallel = parallel,
-        cancellableState = cancellableState
+        fdr, clip, testing = multipleTesting, blackListPath = blacklistPath, name = name, parallel = parallel
     )
 
     override fun getPeaks(
@@ -223,12 +217,10 @@ class OmnipeakBridgeImpl : OmnipeakBridge {
         clip: Double,
         blackListPath: Path?,
         name: String?,
-        parallel: Boolean,
-        cancellableState: CancellableState
+        parallel: Boolean
     ): OmnipeakResult = OmnipeakModelToPeaks.getPeaks(
         fitResults, genomeQuery, fdr, multipleTesting,
-        sensitivity, gap, summits, clip, blackListPath, parallel, name,
-        cancellableState
+        sensitivity, gap, summits, clip, blackListPath, parallel, name
     )
 
     override fun callPeaks(
@@ -237,8 +229,7 @@ class OmnipeakBridgeImpl : OmnipeakBridge {
         bin: Int,
         fdr: Double,
         modelPath: Path,
-        peaksPath: Path?,
-        cancellableState: CancellableState
+        peaksPath: Path?
     ): List<Peak> {
         val experiment = OmnipeakPeakCallingExperiment.getExperiment(
             genomeQuery,
@@ -256,9 +247,7 @@ class OmnipeakBridgeImpl : OmnipeakBridge {
             saveExtendedInfo = false,
             keepCacheFiles = false
         )
-        cancellableState.checkCanceled()
         val results = experiment.results
-        cancellableState.checkCanceled()
         val peaks = OmnipeakModelToPeaks.getPeaks(
             results,
             genomeQuery,
@@ -269,10 +258,8 @@ class OmnipeakBridgeImpl : OmnipeakBridge {
             false,
             clip = OmnipeakConstants.OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL,
             blackListPath = null,
-            name = modelPath.fileName.stem,
-            cancellableState = cancellableState
+            name = modelPath.fileName.stem
         )
-        cancellableState.checkCanceled()
         val peaksList = OmnipeakCLAAnalyze.processBlackList(genomeQuery, peaks, null)
         if (peaksPath != null) {
             Peak.savePeaks(peaksList, peaksPath)

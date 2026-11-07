@@ -12,7 +12,6 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakAnalyzeFitInformation
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getChromosomeCandidates
 import org.jetbrains.bio.omnipeak.peaks.CandidatesScores.Companion.effectiveBins
 import org.jetbrains.bio.omnipeak.peaks.SensitivityGap.SensitivityGapResult
-import org.jetbrains.bio.util.CancellableState
 import org.jetbrains.bio.viktor.F64Array
 import org.junit.Test
 import kotlin.math.max
@@ -241,13 +240,13 @@ class CandidatesTest {
             gq, fitInfo, logNullMap, candidates,
             sensitivity = -10.0, avgAutocorrelation = 0.0, summits = false, singleModeLength = 0,
             clip = 0.0, fdr = 0.5, failures = null, multipleTesting = MultipleTesting.BH,
-            blacklistPath = null, name = "test", parallel = false, cancellableState = CancellableState.fake()
+            blacklistPath = null, name = "test", parallel = false
         )
         val peaksNegBin = bridge.candidatesToPeaks(
             gq, fitInfo, logNullMap, candidates,
             sensitivity = -10.0, avgAutocorrelation = 0.0, summits = false, singleModeLength = 0,
             clip = 0.0, fdr = 0.5, failures = 1.0, multipleTesting = MultipleTesting.BH,
-            blacklistPath = null, name = "test", parallel = false, cancellableState = CancellableState.fake()
+            blacklistPath = null, name = "test", parallel = false
         )
         assertEquals(1, peaksPoisson.size)
         assertEquals(1, peaksNegBin.size)

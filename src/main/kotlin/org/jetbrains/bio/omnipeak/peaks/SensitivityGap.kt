@@ -16,7 +16,6 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakConstants.OMNIPEAK_SENSITIVITY_N
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitInformation
 import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakModelToPeaks.getChromosomeCandidates
-import org.jetbrains.bio.util.CancellableState
 import org.jetbrains.bio.util.await
 import org.jetbrains.bio.viktor.F64Array
 import org.slf4j.LoggerFactory
@@ -74,8 +73,7 @@ object SensitivityGap {
         gapCmdArg: Int? = null,
         summits: Boolean = false,
         parallel: Boolean = true,
-        name: String? = null,
-        cancellableState: CancellableState? = null
+        name: String? = null
     ): SensitivityGapResult {
         val fitInfo = omnipeakFitResults.fitInfo
         val avgAutocorrelation = AutoCorrelations.avgAutocorrelation(omnipeakFitResults, fitInfo, genomeQuery)
@@ -87,7 +85,7 @@ object SensitivityGap {
         // Estimate sensitivity
         val sensitivityInfo = estimateSensitivity(
             genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
-            parallel, name, cancellableState
+            parallel, name
         )
         val beforeMergeIdx = if (sensitivityCmdArg == null) sensitivityInfo.pepInfo?.beforeMerge else null
         val mergeSensitivity = if (beforeMergeIdx != null && beforeMergeIdx in sensitivityInfo.sensitivities.indices)
@@ -175,11 +173,8 @@ object SensitivityGap {
         logNullMembershipsMap: GenomeMap<F64Array>,
         bitList2reuseMap: GenomeMap<BitList>,
         parallel: Boolean,
-        name: String?,
-        cancellableState: CancellableState?
+        name: String?
     ): SensitivityInfo {
-        cancellableState?.checkCanceled()
-
         LOG.debug("${name ?: ""} Analyzing candidates by sensitivities...")
         val (sensitivities, candidatesNs, candidatesALs) = getSensitivitiesAndCandidatesCharacteristics(
             genomeQuery,
@@ -188,7 +183,6 @@ object SensitivityGap {
             bitList2reuseMap
         )
         val st = detectSensitivityTriangle(sensitivities, candidatesNs, candidatesALs)
-        cancellableState?.checkCanceled()
         if (st != null) {
             LOG.debug("${name ?: ""} Analyzing candidates additive numbers...")
             val sensitivitiesLimited =

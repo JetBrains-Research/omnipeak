@@ -85,8 +85,7 @@ class OmnipeakModelFitExperimentTest {
                     sensitivityCmdArg = OMNIPEAK_DEFAULT_SENSITIVITY,
                     gapCmdArg = OMNIPEAK_DEFAULT_GAP,
                     summits = false,
-                    clip = OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL,
-                    cancellableState = null
+                    clip = OMNIPEAK_DEFAULT_CLIP_MAX_SIGNAL
                 )
                     .peaks
                     .isNotEmpty(),

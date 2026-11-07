@@ -11,7 +11,6 @@ import org.jetbrains.bio.omnipeak.fit.OmnipeakFitResults
 import org.jetbrains.bio.omnipeak.peaks.MultipleTesting
 import org.jetbrains.bio.omnipeak.peaks.OmnipeakResult
 import org.jetbrains.bio.omnipeak.peaks.Peak
-import org.jetbrains.bio.util.CancellableState
 import org.jetbrains.bio.viktor.F64Array
 import java.nio.file.Path
 
@@ -46,8 +45,7 @@ interface OmnipeakBridge {
         logNullMembershipsMap: GenomeMap<F64Array>,
         bitList2reuseMap: GenomeMap<BitList>,
         parallel: Boolean = true,
-        name: String? = null,
-        cancellableState: CancellableState = CancellableState.current()
+        name: String? = null
     ): Double?
 
     fun estimateCandidateGapNs(
@@ -79,8 +77,7 @@ interface OmnipeakBridge {
         bitList2reuseMap: GenomeMap<BitList>,
         fdr: Double,
         parallel: Boolean = true,
-        name: String? = null,
-        cancellableState: CancellableState = CancellableState.current()
+        name: String? = null
     ): Pair<Double, Int>
 
     fun getChromosomeCandidates(
@@ -114,8 +111,7 @@ interface OmnipeakBridge {
         multipleTesting: MultipleTesting,
         blacklistPath: Path?,
         name: String?,
-        parallel: Boolean,
-        cancellableState: CancellableState
+        parallel: Boolean
     ): List<Peak>
 
     fun getPeaks(
@@ -129,8 +125,7 @@ interface OmnipeakBridge {
         clip: Double = 0.4,
         blackListPath: Path? = null,
         name: String? = null,
-        parallel: Boolean = true,
-        cancellableState: CancellableState = CancellableState.current()
+        parallel: Boolean = true
     ): OmnipeakResult
 
     fun callPeaks(
@@ -139,8 +134,7 @@ interface OmnipeakBridge {
         bin: Int,
         fdr: Double,
         modelPath: Path,
-        peaksPath: Path?,
-        cancellableState: CancellableState = CancellableState.current()
+        peaksPath: Path?
     ): List<Peak>
 
     fun savePeaks(peaks: List<Peak>, path: Path, peakName: String = "peak")

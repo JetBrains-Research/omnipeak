@@ -22,7 +22,6 @@ import org.jetbrains.bio.omnipeak.statistics.hmm.FreeNBZHMM
 import org.jetbrains.bio.statistics.f64Array
 import org.jetbrains.bio.statistics.hypothesis.BenjaminiHochberg
 import org.jetbrains.bio.statistics.hypothesis.Fdr
-import org.jetbrains.bio.util.CancellableState
 import org.jetbrains.bio.util.await
 import org.jetbrains.bio.viktor.F64Array
 import org.jetbrains.bio.viktor.KahanSum
@@ -66,8 +65,7 @@ object OmnipeakModelToPeaks {
         clip: Double,
         blackListPath: Path? = null,
         parallel: Boolean = true,
-        name: String? = null,
-        cancellableState: CancellableState? = null,
+        name: String? = null
     ): OmnipeakResult {
         val fitInfo = omnipeakFitResults.fitInfo
         // Prepare fit information for scores computations
@@ -88,13 +86,12 @@ object OmnipeakModelToPeaks {
         // Estimate sensitivity and gap
         val sensitivityGapResult = SensitivityGap.estimateSensitivityAndGap(
             genomeQuery, omnipeakFitResults, logNullMembershipsMap, bitList2reuseMap,
-            fdr, sensitivityCmdArg, gapCmdArg, summits, parallel, name, cancellableState
+            fdr, sensitivityCmdArg, gapCmdArg, summits, parallel, name
         )
         val sensitivity = sensitivityGapResult.sensitivity
         val gap = sensitivityGapResult.gap
 
         val candidatesMap = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
-            cancellableState?.checkCanceled()
             if (!fitInfo.containsChromosomeInfo(chromosome)) {
                 return@genomeMap emptyList()
             }
@@ -130,8 +127,7 @@ object OmnipeakModelToPeaks {
             multipleTesting,
             blackListPath,
             name,
-            parallel,
-            cancellableState
+            parallel
         )
         return OmnipeakResult(fdr, sensitivityGapResult.sensitivity, gap, peaks)
     }
@@ -151,15 +147,13 @@ object OmnipeakModelToPeaks {
         testing: MultipleTesting = MultipleTesting.BH,
         blackListPath: Path? = null,
         name: String? = null,
-        parallel: Boolean = false,
-        cancellableState: CancellableState? = null
+        parallel: Boolean = false
     ): List<Peak> {
         var candidatesOrSummitsMap = candidatesMap
         if (summits) {
             LOG.info("${name ?: ""} Processing summits")
             if (singleModeLength > 0) {
                 candidatesOrSummitsMap = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
-                    cancellableState?.checkCanceled()
                     if (!fitInfo.containsChromosomeInfo(chromosome)) {
                         return@genomeMap emptyList()
                     }
@@ -170,7 +164,6 @@ object OmnipeakModelToPeaks {
                 // Filter summits requiring at least some significant signal
                 val summitsFilteredCount = AtomicInteger(0)
                 candidatesOrSummitsMap = genomeMap(genomeQuery, parallel = parallel) { chromosome ->
-                    cancellableState?.checkCanceled()
                     if (!fitInfo.containsChromosomeInfo(chromosome)) {
                         return@genomeMap emptyList()
                     }
@@ -212,7 +205,6 @@ object OmnipeakModelToPeaks {
 
         // Compute candidate locations and blocks of significance
         val candidateCoordinatesMap = genomeMap(genomeQuery, parallel) { chromosome ->
-            cancellableState?.checkCanceled()
             if (!fitInfo.containsChromosomeInfo(chromosome)) {
                 return@genomeMap emptyList()
             }
@@ -221,8 +213,7 @@ object OmnipeakModelToPeaks {
             val logNullMemberships = logNullMembershipsMap[chromosome]
             processCandidateCoordinates(
                 chromosome, chrCandidates, fitInfo, logNullMemberships, offsets,
-                blackList, avgSignalDensity, avgNoiseDensity, clip, summits,
-                cancellableState
+                blackList, avgSignalDensity, avgNoiseDensity, clip, summits
             )
         }
 
@@ -245,12 +236,11 @@ object OmnipeakModelToPeaks {
         if (candidateLocationsTotal != 0) {
             // Estimate global pvalues
             val logPValsMap = genomeMap(genomeQuery, parallel) { chromosome ->
-                cancellableState?.checkCanceled()
                 if (!fitInfo.containsChromosomeInfo(chromosome)) {
                     return@genomeMap FAKE_ARRAY // Return fake array to keep typing
                 }
                 return@genomeMap estimateCandidatesLogPs(
-                    chromosome, candidateCoordinatesMap[chromosome], candidatesScores, cancellableState
+                    chromosome, candidateCoordinatesMap[chromosome], candidatesScores
                 )
             }
 
@@ -289,7 +279,6 @@ object OmnipeakModelToPeaks {
             // 1) Return broad peaks in case of broad modifications even for strict FDR settings
             // 2) Mitigate the problem when the number of peaks for strict FDR is much bigger than for relaxed FDR
             peaks = genomeQuery.get().map { chromosome ->
-                cancellableState?.checkCanceled()
                 if (!fitInfo.containsChromosomeInfo(chromosome)) {
                     return@map emptyList()
                 }
@@ -468,8 +457,7 @@ object OmnipeakModelToPeaks {
         avgSignalDensity: Double?,
         avgNoiseDensity: Double?,
         clip: Double,
-        summits: Boolean,
-        cancellableState: CancellableState?
+        summits: Boolean
     ): List<CandidateCoordinates> {
         // Compute candidates coordinates and blocks to estimate significance
         // 1) Return broad peaks in case of broad modifications even for strict FDR settings
@@ -483,7 +471,6 @@ object OmnipeakModelToPeaks {
                     it !is BigWigBinnedCoverageQuery && (it.areCachesPresent() || it.isLoaded())
                 } ?: false
         return candidates.mapNotNull { (from, to) ->
-            cancellableState?.checkCanceled()
             var start = offsets[from]
             var end = if (to < offsets.size) offsets[to] else chromosome.length
             if (blackList != null && blackList.intersects(Location(start, end, chromosome))) {
@@ -526,14 +513,12 @@ object OmnipeakModelToPeaks {
     fun estimateCandidatesLogPs(
         chromosome: Chromosome,
         candidateCoordinates: List<CandidateCoordinates>,
-        candidatesScores: CandidatesScores,
-        cancellableState: CancellableState?
+        candidatesScores: CandidatesScores
     ): F64Array {
         if (candidateCoordinates.isEmpty()) {
             return FAKE_ARRAY
         }
         return F64Array(candidateCoordinates.size) { idx ->
-            cancellableState?.checkCanceled()
             val blocks = candidateCoordinates[idx].blocks
             val blocksLogPs = blocks.map { (blockStart, blockEnd) ->
                 val logPValue = candidatesScores.logP(ChromosomeRange(blockStart, blockEnd, chromosome))
